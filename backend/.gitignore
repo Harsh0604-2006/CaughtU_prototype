@@ -1,2 +1,3 @@
 .env
+reset_sim.py
 __pycache__/
