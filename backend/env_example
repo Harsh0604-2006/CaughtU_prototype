@@ -8,7 +8,7 @@ NEO4J_PASSWORD=reLeUP5OeNPIAJop-CwQB4qttgL9JnHvnTRuv4sE0Cc
 
 # Gemini API Configuration
 # Get from https://makersuite.google.com/app/apikey
-GEMINI_API_KEY=AIzaSyCiH-vnDnne8_hheq82kuYmXo_Kkt1MUsA
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 
 # NVD Configuration
 # For demo: Use pre-cached JSON to avoid rate limits

@@ -14,7 +14,7 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "your_password_here")
 
 # Gemini LLM Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "your-gemini-api-key-here")
-GEMINI_MODEL = "gemini-1.5-pro-latest"
+GEMINI_MODEL = "gemini-1.5-pro"
 
 # NVD Configuration (for demo, use pre-cached data)
 NVD_API_KEY = os.getenv("NVD_API_KEY", "")
