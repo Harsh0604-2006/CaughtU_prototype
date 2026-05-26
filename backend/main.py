@@ -47,13 +47,14 @@ class RedAgentResponse(BaseModel):
     """Response model for Red Agent analysis"""
     status: str
     graph: str
-    servers_analyzed: int
-    vulnerabilities_found: int
-    high_risk_servers: List[Dict[str, Any]]
+    nodes_analyzed: int
+    entries_enriched: int
+    high_risk_nodes: List[Dict[str, Any]]
     attack_vectors: List[Dict[str, Any]]
     executive_summary: str
     defensive_priorities: List[str]
-    blast_radii_summary: Dict[str, List[str]]
+    blast_radii_summary: Dict[str, Any]
+    neo4j_relationships: List[Dict[str, Any]]
     timestamp: str
 
 

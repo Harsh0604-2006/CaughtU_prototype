@@ -33,49 +33,50 @@ class RedAgent:
     ) -> Dict[str, Any]:
         """
         Main method to analyze and prioritize attack vectors
+        Dynamically adapts to whatever schema exists in Neo4j
         
         Args:
             graph_name: "prod" or "sim" graph to analyze
-            focus_server: Optional specific server to focus on
+            focus_server: Optional specific node to focus on
         
         Returns:
             Structured attack vector analysis with prioritization
         """
-        logger.info(f"Red Agent starting analysis on {graph_name} graph")
+        logger.info(f"Red Agent starting analysis on {graph_name} graph (schema-agnostic)")
         
         try:
-            # Step 1: Fetch all servers from Neo4j
-            logger.info("Step 1: Fetching servers from Neo4j")
-            servers = self.neo4j.get_servers(graph_name=graph_name)
+            # Step 1: Fetch all nodes from Neo4j (Device, Server, etc.)
+            logger.info("Step 1: Fetching nodes from Neo4j")
+            nodes = self.neo4j.get_servers(graph_name=graph_name)
             
-            if not servers:
-                logger.error("No servers found in graph")
+            if not nodes:
+                logger.error("No nodes found in graph")
                 return {
                     "status": "error",
-                    "message": "No servers found in graph",
-                    "servers_analyzed": 0
+                    "message": "No nodes found in graph",
+                    "nodes_analyzed": 0
                 }
             
-            logger.info(f"Found {len(servers)} servers")
+            logger.info(f"Found {len(nodes)} nodes")
             
-            # Step 2: Get vulnerabilities for these servers
-            logger.info("Step 2: Fetching vulnerabilities from NVD")
-            vulnerabilities = self.neo4j.get_vulnerabilities_for_servers(servers)
-            logger.info(f"Found {len(vulnerabilities)} vulnerabilities")
+            # Step 2: Get relationships/connections for these nodes
+            logger.info("Step 2: Fetching relationships from Neo4j")
+            relationships = self.neo4j.get_vulnerabilities_for_servers(nodes)
+            logger.info(f"Found {len(relationships)} relationships")
             
-            # Step 3: Enrich vulnerability data with NVD information
+            # Step 3: Enrich with NVD CVE data (static cache)
             logger.info("Step 3: Enriching with NVD CVE data")
-            enriched_vulns = self._enrich_vulnerabilities(servers, vulnerabilities)
-            logger.info(f"Enriched {len(enriched_vulns)} vulnerabilities")
+            enriched_vulns = self._enrich_vulnerabilities(nodes, relationships)
+            logger.info(f"Enriched {len(enriched_vulns)} entries")
             
-            # Step 4: Calculate blast radius for high-risk servers
+            # Step 4: Calculate blast radius for critical nodes
             logger.info("Step 4: Calculating blast radius")
-            blast_radii = self._calculate_blast_radii(servers, graph_name)
+            blast_radii = self._calculate_blast_radii(nodes, graph_name)
             
             # Step 5: Use LLM to prioritize attack vectors
             logger.info("Step 5: Using LLM to prioritize attack vectors")
             attack_analysis = self.llm.prioritize_attack_vectors(
-                servers=servers,
+                servers=nodes,
                 vulnerabilities=enriched_vulns,
                 blast_radius=blast_radii
             )
@@ -84,13 +85,14 @@ class RedAgent:
             result = {
                 "status": "success",
                 "graph": graph_name,
-                "servers_analyzed": len(servers),
-                "vulnerabilities_found": len(enriched_vulns),
-                "high_risk_servers": self._identify_high_risk_servers(enriched_vulns),
+                "nodes_analyzed": len(nodes),
+                "entries_enriched": len(enriched_vulns),
+                "high_risk_nodes": self._identify_high_risk_servers(enriched_vulns),
                 "attack_vectors": attack_analysis.get("attack_vectors", []),
                 "executive_summary": attack_analysis.get("executive_summary", ""),
                 "defensive_priorities": attack_analysis.get("defensive_priorities", []),
-                "blast_radii_summary": blast_radii
+                "blast_radii_summary": blast_radii,
+                "neo4j_relationships": relationships
             }
             
             logger.info("Red Agent analysis complete")
@@ -106,93 +108,103 @@ class RedAgent:
     
     def _enrich_vulnerabilities(
         self,
-        servers: List[Dict[str, Any]],
+        nodes: List[Dict[str, Any]],
         vulnerabilities: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
-        Enrich vulnerability data with NVD information
+        Enrich Neo4j vulnerabilities with additional NVD context
         
         Args:
-            servers: List of server nodes
-            vulnerabilities: List of vulnerabilities from Neo4j
+            nodes: List of nodes from Neo4j
+            vulnerabilities: List of vulnerabilities from Neo4j HAS_VULNERABILITY relationships
         
         Returns:
-            Enriched vulnerability list with NVD data
+            Enriched vulnerability data
         """
         enriched = []
         
+        if not vulnerabilities:
+            logger.info("No vulnerabilities found in Neo4j, generating from NVD cache")
+            # If no vulnerabilities in Neo4j, create entries from NVD cache for all products
+            products_in_graph = set()
+            for node in nodes:
+                if node.get('product'):
+                    products_in_graph.add(node['product'])
+            
+            for product in products_in_graph:
+                cves = self.nvd.get_cves_for_product(product, "")
+                for cve in cves[:3]:  # Top 3 per product
+                    enriched.append({
+                        "source_name": "NVD_Cache",
+                        "vuln_name": cve.get('name'),
+                        "cve_id": cve.get('cve_id'),
+                        "cvss_score": cve.get('cvss_score'),
+                        "description": cve.get('description'),
+                        "product": product,
+                        "source": "NVD"
+                    })
+            return enriched
+        
+        # Process vulnerabilities from Neo4j
         for vuln in vulnerabilities:
-            # Get the server for context
-            server_name = vuln.get('server_name')
-            server = next((s for s in servers if s.get('name') == server_name), None)
+            source_name = vuln.get('source_name', '')
+            source_node = next((n for n in nodes if n.get('name') == source_name), None)
             
-            if not server:
-                continue
-            
-            # Fetch CVE data from NVD for this product
-            product = server.get('product', 'unknown')
-            version = server.get('version', '')
-            
-            nvd_cves = self.nvd.get_cves_for_product(product, version)
-            
-            # Find matching CVE in NVD data
-            cve_id = vuln.get('cve_id', '')
-            matching_nvd = next((c for c in nvd_cves if c.get('cve_id') == cve_id), None)
-            
-            # Merge data
+            # Build enriched entry
             enriched_vuln = {
-                **vuln,
-                "product": product,
-                "server_ip": server.get('ip'),
-                "server_zone": server.get('zone'),
-                "server_criticality": server.get('criticality')
+                "source_name": source_name,
+                "source_type": vuln.get('source_type'),
+                "source_product": source_node.get('product') if source_node else None,
+                "source_criticality": source_node.get('criticality') if source_node else None,
+                "vuln_name": vuln.get('vuln_name'),
+                "cve_id": vuln.get('cve_id'),
+                "cvss_score": vuln.get('cvss_score'),
+                "attack_vector": vuln.get('attack_vector'),
+                "attack_complexity": vuln.get('attack_complexity'),
+                "exploit_available": vuln.get('exploit_available'),
+                "description": vuln.get('description'),
+                "all_properties": vuln.get('all_properties'),
+                "source": "Neo4j"
             }
-            
-            # Add NVD data if found
-            if matching_nvd:
-                enriched_vuln.update({
-                    "nvd_description": matching_nvd.get('description'),
-                    "exploit_available": matching_nvd.get('exploit_available', False),
-                    "cvss_severity": matching_nvd.get('cvss_severity')
-                })
             
             enriched.append(enriched_vuln)
         
+        logger.info(f"Enriched {len(enriched)} vulnerabilities from Neo4j")
         return enriched
     
     def _calculate_blast_radii(
         self,
-        servers: List[Dict[str, Any]],
+        nodes: List[Dict[str, Any]],
         graph_name: str
     ) -> Dict[str, List[str]]:
         """
-        Calculate blast radius for each high-risk server
+        Calculate blast radius for each high-risk node (schema-agnostic)
         
         Args:
-            servers: List of servers
+            nodes: List of nodes from Neo4j (Device, Server, etc.)
             graph_name: Graph to query
         
         Returns:
-            Dictionary mapping server names to their blast radii
+            Dictionary mapping node names to their blast radii
         """
         blast_radii = {}
         
-        # Focus on critical/high criticality servers
-        high_risk = [s for s in servers if s.get('criticality') in ['Critical', 'High']]
+        # Focus on critical/high criticality nodes
+        high_risk = [n for n in nodes if n.get('criticality') in ['Critical', 'High', 'CRITICAL', 'HIGH']]
         
-        for server in high_risk[:10]:  # Limit to first 10 to save time
-            server_name = server.get('name')
+        for node in high_risk[:10]:  # Limit to first 10 to save time
+            node_name = node.get('name')
             
             try:
-                blast_radius = self.neo4j.get_blast_radius(server_name, graph_name)
-                affected_nodes = [node.get('name') for node in blast_radius]
-                blast_radii[server_name] = affected_nodes
+                blast_radius = self.neo4j.get_blast_radius(node_name, graph_name)
+                affected_nodes = [n.get('name') for n in blast_radius]
+                blast_radii[node_name] = affected_nodes
                 
-                logger.info(f"Blast radius for {server_name}: {len(affected_nodes)} nodes")
+                logger.info(f"Blast radius for {node_name}: {len(affected_nodes)} nodes affected")
             
             except Exception as e:
-                logger.warning(f"Failed to calculate blast radius for {server_name}: {str(e)}")
-                blast_radii[server_name] = []
+                logger.warning(f"Failed to calculate blast radius for {node_name}: {str(e)}")
+                blast_radii[node_name] = []
         
         return blast_radii
     

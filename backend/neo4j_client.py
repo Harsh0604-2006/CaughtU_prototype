@@ -26,24 +26,30 @@ class Neo4jClient:
     
     def get_servers(self, graph_name: str = PRODUCTION_GRAPH) -> List[Dict[str, Any]]:
         """
-        Fetch all server nodes from Neo4j
+        Fetch all relevant nodes from Neo4j (Device, Server, or any primary entity)
+        Dynamically adapts to whatever schema exists
         
         Args:
             graph_name: Either "prod" or "sim"
         
         Returns:
-            List of server dictionaries with properties
+            List of node dictionaries with properties
         """
-        query = f"""
-        MATCH (s:Server {{graph: "{graph_name}"}})
-        RETURN s.name as name,
-               s.product as product,
-               s.version as version,
-               s.ip as ip,
-               s.os as os,
-               s.criticality as criticality,
-               s.zone as zone
-        ORDER BY s.criticality DESC
+        # First try Server nodes, fall back to Device nodes
+        query = """
+        MATCH (n)
+        WHERE n:Server OR n:Device OR n:Infrastructure
+        RETURN n.name as name,
+               n.product as product,
+               n.version as version,
+               n.ip as ip,
+               n.os as os,
+               n.type as type,
+               n.criticality as criticality,
+               n.zone as zone,
+               labels(n) as node_type
+        ORDER BY n.criticality DESC
+        LIMIT 100
         """
         
         with self.driver.session() as session:
@@ -55,60 +61,63 @@ class Neo4jClient:
     
     def get_vulnerabilities_for_servers(self, servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Fetch vulnerabilities for the given servers
+        Fetch actual vulnerabilities from Neo4j via HAS_VULNERABILITY relationships
         
         Args:
-            servers: List of server dictionaries
+            servers: List of node dictionaries
         
         Returns:
-            List of vulnerability relationships
+            List of vulnerabilities with their related nodes
         """
+        if not servers:
+            return []
+        
         query = """
-        MATCH (s:Server {graph: $graph})-[v:HAS_VULNERABILITY]->(vuln:Vulnerability)
-        WHERE s.name IN $server_names
-        RETURN s.name as server_name,
-               s.criticality as server_criticality,
-               vuln.cve_id as cve_id,
-               vuln.cvss_score as cvss_score,
-               vuln.attack_vector as attack_vector,
-               vuln.attack_complexity as attack_complexity,
-               vuln.exploit_available as exploit_available
-        ORDER BY vuln.cvss_score DESC
+        MATCH (n)-[r:HAS_VULNERABILITY]->(v:Vulnerability)
+        WHERE n.name IN $node_names
+        RETURN n.name as source_name,
+               labels(n) as source_type,
+               v.name as vuln_name,
+               v.cve_id as cve_id,
+               v.cvss_score as cvss_score,
+               v.attack_vector as attack_vector,
+               v.attack_complexity as attack_complexity,
+               v.exploit_available as exploit_available,
+               v.description as description,
+               properties(v) as all_properties
+        ORDER BY v.cvss_score DESC
         """
         
-        server_names = [s['name'] for s in servers]
+        node_names = [s.get('name') for s in servers if s.get('name')]
         
         with self.driver.session() as session:
-            result = session.run(
-                query,
-                graph=PRODUCTION_GRAPH,
-                server_names=server_names
-            )
+            result = session.run(query, node_names=node_names)
             vulnerabilities = [dict(record) for record in result]
         
-        logger.info(f"Fetched {len(vulnerabilities)} vulnerabilities for servers")
+        logger.info(f"Fetched {len(vulnerabilities)} vulnerabilities from Neo4j HAS_VULNERABILITY relationships")
         return vulnerabilities
     
     def get_blast_radius(self, server_name: str, graph_name: str = PRODUCTION_GRAPH) -> List[Dict[str, Any]]:
         """
         Calculate blast radius using Cypher traversal
-        Returns all nodes reachable from the compromised server
+        Returns all nodes reachable from the compromised node (schema-agnostic)
         
         Args:
-            server_name: Name of the compromised server
+            server_name: Name of the compromised node
             graph_name: Graph to query
         
         Returns:
             List of affected nodes
         """
-        query = f"""
-        MATCH (start:Server {{name: $server_name, graph: "{graph_name}"}})
+        query = """
+        MATCH (start {name: $server_name})
         MATCH (start)-[*1..5]->(affected)
-        WHERE affected.graph = "{graph_name}"
         RETURN DISTINCT affected.name as name,
                         labels(affected) as labels,
-                        affected.criticality as criticality
+                        affected.criticality as criticality,
+                        affected.type as type
         ORDER BY affected.criticality DESC
+        LIMIT 100
         """
         
         with self.driver.session() as session:
@@ -120,30 +129,33 @@ class Neo4jClient:
     
     def get_high_criticality_servers(self, graph_name: str = PRODUCTION_GRAPH) -> List[Dict[str, Any]]:
         """
-        Fetch high/critical criticality servers
+        Fetch high/critical criticality nodes from any schema
         
         Args:
             graph_name: Either "prod" or "sim"
         
         Returns:
-            List of high-priority servers
+            List of high-priority nodes
         """
-        query = f"""
-        MATCH (s:Server {{graph: "{graph_name}"}})
-        WHERE s.criticality IN ["Critical", "High"]
-        RETURN s.name as name,
-               s.product as product,
-               s.version as version,
-               s.ip as ip,
-               s.criticality as criticality
-        ORDER BY s.criticality DESC, s.name
+        query = """
+        MATCH (n)
+        WHERE n.criticality IN ["Critical", "High", "CRITICAL", "HIGH"]
+        RETURN n.name as name,
+               n.product as product,
+               n.version as version,
+               n.ip as ip,
+               n.type as type,
+               n.criticality as criticality,
+               labels(n) as node_type
+        ORDER BY n.criticality DESC, n.name
+        LIMIT 100
         """
         
         with self.driver.session() as session:
             result = session.run(query)
-            servers = [dict(record) for record in result]
+            nodes = [dict(record) for record in result]
         
-        return servers
+        return nodes
     
     def check_connection(self) -> bool:
         """
