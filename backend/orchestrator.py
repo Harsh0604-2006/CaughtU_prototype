@@ -69,7 +69,9 @@ class Orchestrator:
         workflow.add_edge("APPLY_FIX", "RETEST")
         workflow.add_edge("RETEST", END)
         
-        return workflow.compile(interrupt_before=["HUMAN_REVIEW"])
+        from langgraph.checkpoint.memory import MemorySaver
+        memory = MemorySaver()
+        return workflow.compile(checkpointer=memory, interrupt_before=["HUMAN_REVIEW"])
 
     def map_blast_radius(self, state: AgentState) -> Dict:
         """State 1: Map the blast radius using Cypher query"""
@@ -121,12 +123,9 @@ class Orchestrator:
         return "rejected"
 
     def apply_fix(self, state: AgentState) -> Dict:
-        """State 5: Apply Cypher mutation on Sim graph. Never mutate PROD from automatic fix."""
+        """State 5: Apply Cypher mutation on graph."""
         logger.info("State: APPLY_FIX")
-        # If target graph is 'prod', we simulate the human applying it by also applying it to prod,
-        # OR we leave prod untouched and let manual actions handle it.
-        # For this prototype we will apply to whatever graph is specified or just SIM.
-        self.blue_agent.apply_fix_simulation(state["server_name"], state["target_graph"])
+        self.blue_agent.apply_fix(state["server_name"], state["target_graph"])
         return {}
 
     def retest(self, state: AgentState) -> Dict:

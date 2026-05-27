@@ -1,0 +1,43 @@
+{
+  "status": "success",
+  "graph": "prod",
+  "nodes_analyzed": 17,
+  "entries_enriched": 1,
+  "high_risk_nodes": [
+    {
+      "server_name": null,
+      "total_vulns": 1,
+      "risk_score": 5.625,
+      "max_cvss": 7.5,
+      "exploitable_vulns": 1
+    }
+  ],
+  "attack_vectors": [],
+  "executive_summary": "",
+  "defensive_priorities": [],
+  "blast_radii_summary": {},
+  "neo4j_relationships": [
+    {
+      "source_name": "LoadBalancer01",
+      "source_type": [
+        "Server"
+      ],
+      "vuln_name": "HTTP/2 Rapid Reset Attack",
+      "cve_id": "CVE-2023-44487",
+      "cvss_score": 7.5,
+      "attack_vector": "Network",
+      "attack_complexity": "Low",
+      "exploit_available": true,
+      "description": "DDoS vulnerability via HTTP/2 rapid stream resets",
+      "all_properties": {
+        "attack_complexity": "Low",
+        "exploit_available": true,
+        "cvss_score": 7.5,
+        "cve_id": "CVE-2023-44487",
+        "name": "HTTP/2 Rapid Reset Attack",
+        "description": "DDoS vulnerability via HTTP/2 rapid stream resets",
+        "attack_vector": "Network"
+      }
+    }
+  ]
+}
