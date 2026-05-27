@@ -1,0 +1,301 @@
+# Red Agent Refactor - Dynamic Schema Discovery & Gemini-Generated Cypher
+
+## Overview
+
+The Red Agent has been completely refactored to eliminate hardcoded Cypher queries and replace them with a dynamic, schema-aware approach. The new flow uses Gemini to generate Cypher queries based on the live Neo4j schema, ensuring adaptability to any graph structure.
+
+## What Changed
+
+### REMOVED (WRONG APPROACH)
+
+❌ Hardcoded Cypher queries with `HAS_VULNERABILITY` relationship  
+❌ Hardcoded `Vulnerability` node label references  
+❌ NVD client dependency (no longer used for Cypher generation)  
+❌ Static vulnerability enrichment methods  
+❌ Hardcoded relationship traversal patterns
+
+### ADDED (CORRECT APPROACH)
+
+#### 1. **Neo4j Client - Schema Discovery Methods**
+
+**File:** `neo4j_client.py`
+
+New methods added:
+
+##### `discover_schema() -> Dict[str, Any]`
+
+Queries Neo4j dynamically to get the live schema:
+
+```python
+schema = {
+    "node_labels": ["Server", "Device", "Database", ...],  # from CALL db.labels()
+    "relationship_types": ["CONNECTS_TO", "ROUTES_TO", "RELAYS_TO", ...],  # from CALL db.relationshipTypes()
+    "node_properties": {
+        "Server": [
+            {"property": "name", "type": "STRING"},
+            {"property": "cvss_score", "type": "FLOAT"},
+            ...
+        ]
+    }
+}
+```
+
+##### `execute_custom_cypher(cypher_query: str, parameters: Dict) -> List[Dict]`
+
+Executes any Cypher query string, enabling LLM-generated queries to run directly.
+
+#### 2. **Red Agent - Three-Step Dynamic Analysis**
+
+**File:** `red_agent.py`
+
+New flow:
+
+```
+Step 1: Schema Discovery
+├─ discover_schema() from Neo4j
+├─ Get node labels, relationships, properties
+└─ No hardcoding - fully dynamic
+
+Step 2: Cypher Generation via Gemini
+├─ Send live schema to Gemini API
+├─ Gemini generates Cypher query based on schema
+├─ Query looks for:
+│  ├─ Highest cvss_score node with exploit_available=true (entry point)
+│  ├─ Traverse CONNECTS_TO, ROUTES_TO, RELAYS_TO up to 4 hops
+│  └─ Return entry point + all reachable nodes with risk scores
+└─ No hardcoding - Gemini adapts to any schema
+
+Step 3: Execute Generated Cypher
+├─ Run LLM-generated query on Neo4j
+├─ Collect raw traversal results
+└─ Returns nodes, relationships, scores
+
+Step 4: Attack Narrative Analysis via Gemini
+├─ Send Cypher results to Gemini
+├─ Gemini analyzes attack path and generates:
+│  ├─ entry_point: Initial compromise node
+│  ├─ cve_used: CVE identifier
+│  ├─ attack_steps: [list of step, action, mitre_technique, target_node, result]
+│  ├─ highest_value_target: Most critical node reachable
+│  ├─ blast_radius_count: Total nodes compromised
+│  ├─ overall_severity: CRITICAL|HIGH|MEDIUM|LOW
+│  └─ recommended_defenses: Immediate actions
+└─ Structured JSON attack report
+
+Step 5: Return Structured Results
+├─ status: "success" or "error"
+├─ schema_discovered: Number of node labels found
+├─ results_found: Number of results from Cypher
+├─ attack_report: Gemini-generated narrative (JSON)
+└─ raw_query_results: First 10 raw results for reference
+```
+
+## New Methods in Red Agent
+
+### `_generate_cypher_query(schema: Dict) -> str`
+
+**Purpose:** Generate Cypher query from live schema using Gemini
+
+**Process:**
+
+1. Format schema into human-readable text
+2. Send to Gemini with prompt asking for:
+   - Find highest cvss_score node with exploit_available=true
+   - Traverse CONNECTS_TO, ROUTES_TO, RELAYS_TO relationships up to 4 hops
+   - Return entry node + all reachable nodes with properties
+3. Strip markdown formatting from response
+4. Return raw Cypher query string
+
+**Key Constraints in Gemini Prompt:**
+
+- Use ONLY existing labels/relationships from schema
+- No hardcoded "Vulnerability" label
+- No hardcoded "HAS_VULNERABILITY" relationship
+- Query must be executable as-is
+- Return ONLY Cypher, nothing else
+
+### `_generate_attack_narrative(cypher_results: List[Dict]) -> Dict`
+
+**Purpose:** Analyze Cypher results and generate attack report using Gemini
+
+**Process:**
+
+1. Format Cypher results as JSON
+2. Send to Gemini with prompt asking for:
+   - entry_point: Name of compromised node
+   - cve_used: CVE identifier
+   - attack_steps: Detailed steps with MITRE techniques
+   - highest_value_target: Most critical node
+   - blast_radius_count: Total compromised nodes
+   - overall_severity: Risk level
+   - recommended_defenses: Immediate actions
+3. Extract JSON from response (handle markdown code blocks)
+4. Return structured attack report
+
+### `_format_schema_for_llm(schema: Dict) -> str`
+
+**Purpose:** Convert schema dictionary into readable format for Gemini
+
+**Output Format:**
+
+```
+NODE LABELS:
+  - Server
+  - Database
+  - Device
+
+RELATIONSHIP TYPES:
+  - CONNECTS_TO
+  - ROUTES_TO
+  - RELAYS_TO
+
+NODE PROPERTIES PER LABEL:
+  Server:
+    - name (STRING)
+    - cvss_score (FLOAT)
+    - exploit_available (BOOLEAN)
+  Database:
+    - name (STRING)
+    - risk_score (FLOAT)
+```
+
+## Key Rules Enforced
+
+✅ **NO hardcoded Cypher queries**
+
+- All queries are generated by Gemini based on live schema
+
+✅ **NO HAS_VULNERABILITY label/relationship**
+
+- Schema discovery finds actual graph structure
+- Gemini generates Cypher for actual relationships
+
+✅ **NO Vulnerability node references**
+
+- Cypher adapts to whatever nodes/relationships exist
+
+✅ **Fresh schema discovery every run**
+
+- `discover_schema()` called at start of each analysis
+
+✅ **Gemini generates all Cypher dynamically**
+
+- Prompt includes full schema, asks for Cypher generation
+- LLM adapts query to actual graph structure
+
+## Usage Example
+
+```python
+from red_agent import RedAgent
+
+# Initialize agent
+agent = RedAgent()
+
+# Run analysis with dynamic schema discovery
+result = agent.analyze_attack_vectors(graph_name="sim")
+
+# Result structure:
+{
+    "status": "success",
+    "graph": "sim",
+    "schema_discovered": 5,  # Number of node labels found
+    "cypher_executed": True,
+    "results_found": 24,  # Nodes found by traversal
+    "attack_report": {
+        "entry_point": "AUTH-03",
+        "cve_used": "CVE-2021-12345",
+        "attack_steps": [
+            {
+                "step": 1,
+                "action": "Exploit vulnerable SSH service",
+                "mitre_technique": "T1021.006",
+                "target_node": "AUTH-03",
+                "result": "Remote code execution achieved"
+            },
+            ...
+        ],
+        "highest_value_target": "PAYMENT-CORE",
+        "blast_radius_count": 24,
+        "overall_severity": "CRITICAL",
+        "recommended_defenses": [...]
+    },
+    "raw_query_results": [...]  # First 10 raw Cypher results
+}
+```
+
+## Gemini Prompts (Embedded in Code)
+
+### Prompt 1: Cypher Generation
+
+```
+Generate a SINGLE Cypher query that:
+1. Finds the highest cvss_score node where exploit_available is true (entry point)
+2. From that node, traverses CONNECTS_TO, ROUTES_TO, and RELAYS_TO relationships up to 4 hops
+3. Finds all reachable nodes and returns:
+   - entry_node name and cvss_score and cve_id
+   - Each reachable node name, risk_score, and path relationship type
+
+Requirements:
+- Use only existing node labels and relationship types from the schema
+- Do NOT use non-existent labels like "Vulnerability" or relationships like "HAS_VULNERABILITY"
+- Return only the Cypher query, no explanation
+- The query must be executable as-is
+- Use DISTINCT to avoid duplicates
+- Order by risk_score descending
+- LIMIT 100 results
+```
+
+### Prompt 2: Attack Narrative
+
+```
+You are a Red Team analyst for a banking network.
+Here are the results of a graph traversal showing an attack path through a bank network: [results]
+
+Analyze this attack path and generate a structured red team attack report.
+
+The report MUST include:
+- entry_point: Name of the compromised node (highest cvss_score)
+- cve_used: The CVE identifier of the initial exploit
+- attack_steps: A list where each step has:
+  - step: step number
+  - action: what the attacker does
+  - mitre_technique: MITRE ATT&CK technique
+  - target_node: which node is compromised
+  - result: outcome of this step
+- highest_value_target: The most critical node reachable
+- blast_radius_count: Total number of nodes compromised
+- overall_severity: "CRITICAL", "HIGH", "MEDIUM", or "LOW"
+- recommended_defenses: List of immediate defensive actions
+```
+
+## Error Handling
+
+- If schema discovery fails: Returns error with empty schema
+- If Cypher generation fails: Returns error, does not attempt execution
+- If Cypher execution fails: Returns error, attempts to continue to narrative (may be empty)
+- If attack narrative fails: Returns error in report with attack_steps = []
+
+## Benefits of This Approach
+
+1. **Zero Hardcoding:** Adapts to any Neo4j graph structure
+2. **Intelligent Query Generation:** Gemini understands graph semantics
+3. **Schema-Aware:** Respects actual node labels and relationships
+4. **Maintainable:** Changes to graph schema require no code changes
+5. **Testable:** Each step can be verified independently
+6. **Transparent:** Raw query results included for audit trail
+7. **Security-Focused:** Attack narrative analysis adds context to raw data
+
+## Testing
+
+The test script [test_orchestrator.py](test_orchestrator.py) includes optional Red Agent testing. You can verify the new flow works by:
+
+```bash
+python backend/red_agent.py
+```
+
+This should produce a JSON output showing:
+
+- Schema discovery results
+- Generated Cypher query
+- Query results
+- Attack report with narrative analysis
