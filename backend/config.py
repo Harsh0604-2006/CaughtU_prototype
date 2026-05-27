@@ -24,6 +24,7 @@ NVD_CACHE_PATH = os.getenv("NVD_CACHE_PATH", "data/nvd_cache.json")
 # Graph Configuration
 SIMULATION_GRAPH = "sim"
 PRODUCTION_GRAPH = "prod"
+DEFAULT_GRAPH = PRODUCTION_GRAPH  # Use prod by default everywhere (for now)
 
 # Red Agent Configuration
 MAX_ATTACK_VECTORS = 5

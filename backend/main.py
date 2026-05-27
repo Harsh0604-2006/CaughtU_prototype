@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any
 import logging
 from datetime import datetime
 from red_agent import RedAgent
-from config import PRODUCTION_GRAPH, SIMULATION_GRAPH
+from config import PRODUCTION_GRAPH, SIMULATION_GRAPH, DEFAULT_GRAPH
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,7 +34,7 @@ app.add_middleware(
 # Pydantic models
 class AttackVectorAnalysisRequest(BaseModel):
     """Request model for attack vector analysis"""
-    graph: str = PRODUCTION_GRAPH
+    graph: str = DEFAULT_GRAPH
     focus_server: Optional[str] = None
 
 class HealthCheckResponse(BaseModel):
@@ -77,8 +77,10 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     global red_agent
-    if red_agent:
-        red_agent.close()
+    if red_agent and hasattr(red_agent, 'neo4j'):
+        # Close Neo4j connection if it has a close method
+        if hasattr(red_agent.neo4j, 'close'):
+            red_agent.neo4j.close()
         logger.info("Red Agent closed")
 
 
@@ -86,24 +88,25 @@ async def shutdown_event():
 async def health_check():
     """
     Health check endpoint
-    Verifies that all services (Neo4j, Gemini, NVD) are accessible
+    Verifies that all services (Neo4j, Gemini) are accessible
     """
     try:
-        # Check Neo4j connection
-        neo4j_status = "✓ Connected" if red_agent.neo4j.check_connection() else "✗ Failed"
-        
-        # Check NVD client
-        nvd_status = "✓ Ready" if red_agent.nvd else "✗ Failed"
-        
-        # Check LLM client
-        llm_status = "✓ Ready" if red_agent.llm else "✗ Failed"
+        # Check if red agent is initialized
+        if not red_agent:
+            neo4j_status = "✗ Not Initialized"
+            llm_status = "✗ Not Initialized"
+        else:
+            # Check Neo4j connection
+            neo4j_status = "✓ Connected" if red_agent.neo4j.check_connection() else "✗ Failed"
+            
+            # Check LLM client
+            llm_status = "✓ Ready" if red_agent.llm else "✗ Failed"
         
         return HealthCheckResponse(
             status="healthy",
             timestamp=datetime.now().isoformat(),
             services={
                 "neo4j": neo4j_status,
-                "nvd": nvd_status,
                 "gemini_llm": llm_status
             }
         )
@@ -112,7 +115,7 @@ async def health_check():
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@app.post("/api/red-agent/analyze", response_model=RedAgentResponse)
+@app.post("/api/red-agent/analyze")
 async def analyze_attack_vectors(request: AttackVectorAnalysisRequest):
     """
     Analyze attack vectors for specified graph
@@ -164,8 +167,55 @@ async def analyze_attack_vectors(request: AttackVectorAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
+@app.get("/analyze-attack-vectors")
+async def analyze_attack_vectors_get(graph: str = DEFAULT_GRAPH, focus_server: Optional[str] = None):
+    """
+    Analyze attack vectors for specified graph (GET endpoint)
+    
+    Args:
+        graph: Graph name ("prod" or "sim") - defaults to prod
+        focus_server: Optional specific node to focus on
+    
+    Returns:
+        Dynamic attack analysis with Gemini-generated insights
+    """
+    try:
+        if not red_agent:
+            raise HTTPException(status_code=503, detail="Red Agent not initialized")
+        
+        # Validate graph name
+        if graph not in [PRODUCTION_GRAPH, SIMULATION_GRAPH]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid graph: {graph}. Must be '{PRODUCTION_GRAPH}' or '{SIMULATION_GRAPH}'"
+            )
+        
+        logger.info(f"Starting dynamic attack vector analysis on {graph} graph")
+        
+        # Run analysis
+        result = red_agent.analyze_attack_vectors(
+            graph_name=graph,
+            focus_server=focus_server
+        )
+        
+        # Add timestamp
+        result['timestamp'] = datetime.now().isoformat()
+        
+        # Handle errors
+        if result.get('status') == 'error':
+            raise HTTPException(status_code=500, detail=result.get('message', 'Analysis failed'))
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Attack vector analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
 @app.get("/api/red-agent/servers/{graph}")
-async def get_servers(graph: str = PRODUCTION_GRAPH):
+async def get_servers(graph: str = DEFAULT_GRAPH):
     """
     Get all servers from specified graph
     
@@ -308,18 +358,28 @@ async def get_high_criticality_servers(graph: str = PRODUCTION_GRAPH):
 async def get_cves_for_product(product: str):
     """
     Get CVEs for a specific product from NVD cache
+    Note: CVE data is synced via nvd_sync.py script and stored in Neo4j nodes
     
     Args:
         product: Product name (e.g., "openssh", "openssl")
     
     Returns:
-        List of CVEs for the product
+        List of nodes with CVE data
     """
     try:
         if not red_agent:
             raise HTTPException(status_code=503, detail="Red Agent not initialized")
         
-        cves = red_agent.nvd.get_cves_for_product(product)
+        # Query Neo4j for nodes with CVE data for this product
+        with red_agent.neo4j.driver.session() as session:
+            result = session.run("""
+                MATCH (n)
+                WHERE n.product_mapped = $product AND n.cve_id IS NOT NULL
+                RETURN n.name, n.cvss_score, n.cve_id, n.exploit_available, n.attack_vector
+                ORDER BY n.cvss_score DESC
+            """, {"product": product})
+            
+            cves = [dict(record) for record in result]
         
         return {
             "status": "success",
@@ -331,6 +391,54 @@ async def get_cves_for_product(product: str):
     
     except Exception as e:
         logger.error(f"Failed to fetch CVEs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/red-agent/products")
+async def get_all_products():
+    """
+    Get all NVD products and the banking nodes mapped to them
+    Shows product-to-node mappings from nvd_sync enrichment
+    
+    Returns:
+        Dictionary of products with mapped nodes
+    """
+    try:
+        if not red_agent:
+            raise HTTPException(status_code=503, detail="Red Agent not initialized")
+        
+        # Query Neo4j for all distinct products with their nodes
+        with red_agent.neo4j.driver.session() as session:
+            result = session.run("""
+                MATCH (n)
+                WHERE n.product_mapped IS NOT NULL
+                RETURN DISTINCT n.product_mapped as product,
+                       collect({
+                           name: n.name,
+                           type: n.type,
+                           risk_score: n.risk_score,
+                           cvss_score: n.cvss_score,
+                           cve_id: n.cve_id
+                       }) as nodes
+                ORDER BY product
+            """)
+            
+            products = {}
+            for record in result:
+                product = record.get("product")
+                nodes = record.get("nodes")
+                if product:
+                    products[product] = nodes
+        
+        return {
+            "status": "success",
+            "products_count": len(products),
+            "products": products,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to fetch products: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -375,11 +483,13 @@ async def root():
         "description": "Generative AI-powered cybersecurity platform for banking",
         "endpoints": {
             "health": "GET /health",
-            "analyze_attack_vectors": "POST /api/red-agent/analyze",
+            "analyze_attack_vectors_get": "GET /analyze-attack-vectors?graph=sim",
+            "analyze_attack_vectors_post": "POST /api/red-agent/analyze",
             "get_servers": "GET /api/red-agent/servers/{graph}",
             "get_vulnerabilities": "GET /api/red-agent/vulnerabilities/{graph}",
             "get_blast_radius": "GET /api/red-agent/blast-radius/{graph}/{server_name}",
             "get_high_criticality_servers": "GET /api/red-agent/high-criticality-servers/{graph}",
+            "get_products": "GET /api/red-agent/products",
             "get_cves": "GET /api/red-agent/cves/{product}",
             "generate_playbook": "POST /api/red-agent/remediation-playbook"
         },

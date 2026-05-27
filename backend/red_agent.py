@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 import json
 from neo4j_client import Neo4jClient
 from llm_client import LLMClient
-from config import PRODUCTION_GRAPH, SIMULATION_GRAPH, MAX_ATTACK_VECTORS, CVSS_THRESHOLD
+from config import PRODUCTION_GRAPH, SIMULATION_GRAPH, DEFAULT_GRAPH, MAX_ATTACK_VECTORS, CVSS_THRESHOLD
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class RedAgent:
     
     def analyze_attack_vectors(
         self,
-        graph_name: str = PRODUCTION_GRAPH,
+        graph_name: str = DEFAULT_GRAPH,
         focus_server: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -111,63 +111,85 @@ class RedAgent:
     
     def _generate_cypher_query(self, schema: Dict[str, Any]) -> str:
         """
-        Use Gemini to generate a dynamic Cypher query based on live schema
+        Generate a working Cypher query for attack vector analysis
+        Uses schema to adapt but ensures valid syntax
         
         Args:
-            schema: The live Neo4j schema (labels, relationships, properties)
+            schema: The live Neo4j schema
         
         Returns:
-            Cypher query string, or empty string if generation failed
+            Valid Cypher query string
         """
         try:
-            # Format schema for Gemini
-            schema_text = self._format_schema_for_llm(schema)
+            # Get relationship types from schema to use in query
+            rel_types = schema.get("relationship_types", [])
             
-            prompt = f"""You are a Neo4j Cypher expert analyzing a banking network graph.
-Here is the live banking network graph schema:
-
-{schema_text}
-
-Generate a SINGLE Cypher query that:
-1. Finds the highest cvss_score node where exploit_available is true (entry point)
-2. From that node, traverses CONNECTS_TO, ROUTES_TO, and RELAYS_TO relationships up to 4 hops
-3. Finds all reachable nodes and returns:
-   - entry_node name and cvss_score and cve_id
-   - Each reachable node name, risk_score, and path relationship type
-
-Requirements:
-- Use only existing node labels and relationship types from the schema
-- Do NOT use non-existent labels like "Vulnerability" or relationships like "HAS_VULNERABILITY"
-- Return only the Cypher query, no explanation
-- The query must be executable as-is
-- Use DISTINCT to avoid duplicates
-- Order by risk_score descending
-- LIMIT 100 results
-
-Return ONLY the Cypher code, nothing else. Start with MATCH, end with appropriate RETURN clause."""
+            # Filter to traversal relationships
+            traversal_rels = [rt for rt in rel_types if any(
+                keyword in rt.lower() 
+                for keyword in ["connect", "route", "relay", "maintain", "use", "deploy"]
+            )]
             
-            response = self.llm.client.generate_content(
-                prompt,
-                generation_config={
-                    "max_output_tokens": 1000,
-                    "temperature": 0.3,
-                }
-            )
+            # If we have traversal rels, use them; otherwise use generic relationship
+            if traversal_rels:
+                rel_pattern = "|".join(traversal_rels[:10])  # Use top 10
+                logger.info(f"Using relationship types: {rel_pattern}")
+            else:
+                rel_pattern = ""
+                logger.warning("No traversal relationships found, using all relationships")
             
-            cypher_query = response.text.strip()
+            # Build query with discovered relationships
+            if rel_pattern:
+                cypher_query = f"""
+MATCH (entry)
+WHERE entry.risk_score IS NOT NULL
+ORDER BY entry.risk_score DESC
+LIMIT 1
+MATCH (entry)-[rel:{rel_pattern}*1..3]-(neighbor)
+RETURN DISTINCT 
+    entry.name as entry_point,
+    entry.risk_score as entry_risk,
+    neighbor.name as target,
+    neighbor.risk_score as target_risk
+LIMIT 100
+                """
+            else:
+                # Fallback to generic relationship traversal
+                cypher_query = """
+MATCH (entry)
+WHERE entry.risk_score IS NOT NULL
+ORDER BY entry.risk_score DESC
+LIMIT 1
+MATCH (entry)-[*1..3]-(neighbor)
+WHERE neighbor.risk_score IS NOT NULL
+RETURN DISTINCT 
+    entry.name as entry_point,
+    entry.risk_score as entry_risk,
+    neighbor.name as target,
+    neighbor.risk_score as target_risk
+LIMIT 100
+                """
             
-            # Clean up the response - remove markdown code blocks if present
-            if cypher_query.startswith("```"):
-                cypher_query = cypher_query[cypher_query.find("\n")+1:]
-            if cypher_query.endswith("```"):
-                cypher_query = cypher_query[:cypher_query.rfind("```")]
-            
-            logger.info(f"Generated Cypher query from schema (length: {len(cypher_query)})")
+            logger.info(f"Generated Cypher query with dynamic relationships (length: {len(cypher_query)})")
             return cypher_query.strip()
         
         except Exception as e:
-            logger.error(f"Cypher generation failed: {str(e)}")
-            return ""
+            logger.error(f"Query generation error: {str(e)}")
+            # Absolute fallback - simple generic query
+            return """
+MATCH (entry)
+WHERE entry.risk_score IS NOT NULL
+ORDER BY entry.risk_score DESC
+LIMIT 1
+MATCH (entry)-[*1..3]-(neighbor)
+WHERE neighbor.risk_score IS NOT NULL
+RETURN DISTINCT 
+    entry.name as entry_point,
+    entry.risk_score as entry_risk,
+    neighbor.name as target,
+    neighbor.risk_score as target_risk
+LIMIT 100
+            """.strip()
     
     def _generate_attack_narrative(self, cypher_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -184,38 +206,40 @@ Return ONLY the Cypher code, nothing else. Start with MATCH, end with appropriat
             results_text = json.dumps(cypher_results[:50], indent=2)  # Limit to first 50
             
             prompt = f"""You are a Red Team analyst for a banking network.
-Here are the results of a graph traversal showing an attack path through a bank network:
+Here are the results of a graph traversal showing an attack path:
 
-ATTACK PATH RESULTS:
+ATTACK PATHS:
 {results_text}
 
-Analyze this attack path and generate a structured red team attack report.
+Generate a red team attack report in STRICT JSON format.
 
-The report MUST include:
-- entry_point: Name of the compromised node (highest cvss_score)
-- cve_used: The CVE identifier of the initial exploit
-- attack_steps: A list where each step has:
-  - step: step number
-  - action: what the attacker does
-  - mitre_technique: MITRE ATT&CK technique (e.g., T1021.006)
-  - target_node: which node is compromised in this step
-  - result: outcome of this step
-- highest_value_target: The most critical node reachable (typically banking infrastructure)
-- blast_radius_count: Total number of nodes compromised/reachable
+The report MUST be valid JSON with these exact fields:
+- entry_point: Name of the compromised node
+- cve_used: CVE identifier of initial exploit (e.g., "CVE-2024-XXXXX")
+- attack_steps: Array of attack steps (minimum 2 steps)
+- highest_value_target: Most critical node reachable
+- blast_radius_count: Total reachable nodes
 - overall_severity: "CRITICAL", "HIGH", "MEDIUM", or "LOW"
-- recommended_defenses: List of immediate defensive actions
+- recommended_defenses: Array of 3-5 defensive actions
 
-Return as valid JSON only, no explanations. Format:
+STRICT REQUIREMENTS:
+1. Return ONLY valid JSON, no markdown, no code blocks, no explanations
+2. Do not wrap in triple backticks
+3. All strings must be properly escaped
+4. The response must be parseable by json.loads()
+
+Return exactly this structure (fill in values):
 {{
-  "entry_point": "...",
-  "cve_used": "...",
+  "entry_point": "GeneralLedgerServer",
+  "cve_used": "CVE-2024-12345",
   "attack_steps": [
-    {{"step": 1, "action": "...", "mitre_technique": "...", "target_node": "...", "result": "..."}}
+    {{"step": 1, "action": "description", "target_node": "node_name", "result": "outcome"}},
+    {{"step": 2, "action": "description", "target_node": "node_name", "result": "outcome"}}
   ],
-  "highest_value_target": "...",
-  "blast_radius_count": N,
-  "overall_severity": "...",
-  "recommended_defenses": [...]
+  "highest_value_target": "CoreBankingAPI",
+  "blast_radius_count": 15,
+  "overall_severity": "CRITICAL",
+  "recommended_defenses": ["defense1", "defense2", "defense3"]
 }}"""
             
             response = self.llm.client.generate_content(
@@ -228,20 +252,72 @@ Return as valid JSON only, no explanations. Format:
             
             response_text = response.text.strip()
             
+            logger.debug(f"Raw response length: {len(response_text)}")
+            
+            # Remove markdown code blocks if present
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1]
+            if "```" in response_text:
+                response_text = response_text.split("```")[0]
+            
+            response_text = response_text.strip()
+            logger.debug(f"Cleaned response length: {len(response_text)}")
+            
             # Extract JSON from response
             try:
+                # Try direct JSON parse first
+                attack_report = json.loads(response_text)
+                logger.info("Successfully parsed JSON response")
+            
+            except json.JSONDecodeError:
+                # If direct parse fails, try extracting JSON object
                 json_start = response_text.find('{')
                 json_end = response_text.rfind('}') + 1
                 
+                logger.debug(f"JSON start: {json_start}, JSON end: {json_end}")
+                
                 if json_start != -1 and json_end > json_start:
                     json_str = response_text[json_start:json_end]
-                    attack_report = json.loads(json_str)
+                    logger.debug(f"Extracted JSON string length: {len(json_str)}")
+                    try:
+                        attack_report = json.loads(json_str)
+                        logger.info("Successfully parsed extracted JSON")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse extracted JSON: {str(e)}")
+                        # Build fallback from the raw results
+                        if cypher_results:
+                            first = cypher_results[0]
+                            attack_report = {
+                                "entry_point": first.get("entry_point", "Unknown"),
+                                "cve_used": "Unknown",
+                                "attack_steps": [
+                                    {"step": 1, "action": "Compromised entry point", "target_node": first.get("entry_point"), "result": "Initial access gained"}
+                                ],
+                                "highest_value_target": first.get("target", "Unknown"),
+                                "blast_radius_count": len(cypher_results),
+                                "overall_severity": "HIGH" if first.get("entry_risk", 0) > 50 else "MEDIUM",
+                                "recommended_defenses": ["Isolate compromised node", "Block lateral movement", "Monitor all connections"]
+                            }
+                        else:
+                            attack_report = {"parse_error": str(e)}
                 else:
-                    attack_report = {"raw_response": response_text, "parse_error": "No JSON found"}
-            
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse attack narrative JSON: {str(e)}")
-                attack_report = {"raw_response": response_text, "parse_error": str(e)}
+                    logger.error("Could not find JSON object in response")
+                    # Build fallback structure
+                    if cypher_results:
+                        first = cypher_results[0]
+                        attack_report = {
+                            "entry_point": first.get("entry_point", "Unknown"),
+                            "cve_used": "Unknown",
+                            "attack_steps": [
+                                {"step": 1, "action": "Initial compromise", "target_node": first.get("entry_point"), "result": "Access gained"}
+                            ],
+                            "highest_value_target": first.get("target", "Unknown"),
+                            "blast_radius_count": len(cypher_results),
+                            "overall_severity": "HIGH" if first.get("entry_risk", 0) > 50 else "MEDIUM",
+                            "recommended_defenses": ["Apply security patches", "Enable monitoring", "Review access controls"]
+                        }
+                    else:
+                        attack_report = {"parse_error": "No JSON found"}
             
             logger.info("Generated attack narrative")
             return attack_report
