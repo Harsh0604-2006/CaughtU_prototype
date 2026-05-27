@@ -86,9 +86,9 @@ class NVDSync:
                 cves = self.nvd.get_cves_for_product(product)
                 if cves:
                     product_cves[product] = cves
-                    logger.info(f"  {product} ({label}): {len(cves)} CVEs found")
+                    logger.info(f"  {product}: {len(cves)} CVEs found")
                 else:
-                    logger.warning(f"  {product} ({label}): No CVEs found")
+                    logger.warning(f"  {product}: No CVEs found")
             
             logger.info(f"Fetched CVEs for {len(product_cves)} products")
             

@@ -28,7 +28,7 @@ def run_test():
         orchestrator = Orchestrator()
         
         # We will use CoreDBServer01 since it's highly connected and vulnerable
-        target_server = "CoreDBServer01"
+        target_server = "CoreBankingAPI"
         
         # 2. Start the cycle until it interrupts for HUMAN_REVIEW
         print(f"\n[*] Starting Dual-Loop Cycle for {target_server} on {PRODUCTION_GRAPH}...")

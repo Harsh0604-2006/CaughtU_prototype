@@ -4,88 +4,79 @@
       "step": 1,
       "phase": "IMMEDIATE",
       "responsible_team": "DevOps",
-      "action": "Implement network isolation for CoreDBServer01. Restrict inbound access to the database port (e.g., 5432 for PostgreSQL) to only essential application servers and trusted administration hosts. This can be done via cloud security groups, network ACLs, or host-based firewalls.",
-      "success_criteria": "Verify that CoreDBServer01's database port (e.g., 5432) is inaccessible from unauthorized IP addresses. Use `nmap` or `telnet` from a non-authorized host:\n```bash\nnmap -p 5432 CoreDBServer01_IP\ntelnet CoreDBServer01_IP 5432\n# Expected: Connection refused or timed out from unauthorized IPs\n```\nFor cloud security groups, verify the inbound rules are updated.",
+      "action": "Restrict Network Access to CoreBankingAPI. Update Network Security Group (NSG), Security Group, or Firewall rules to limit inbound traffic to the CoreBankingAPI endpoint (typically port 443/TCP or 80/TCP) to only trusted internal IP ranges (e.g., API Gateway, internal microservices, authorized jump boxes). This is a critical containment step.",
+      "success_criteria": "Verify network rules are applied and only authorized sources can reach the API. Example (AWS CLI): `aws ec2 describe-security-groups --group-ids sg-xxxxxxxx --query 'SecurityGroups[0].IpPermissions'` and confirm `IpRanges` are restricted. Attempt to access the API from an unauthorized IP to confirm blockage.",
       "estimated_time": "15 minutes",
-      "rollback_procedure": "Revert firewall rules or security group configurations to their state prior to this step. For `ufw` (Ubuntu Firewall) example: `sudo ufw allow from any to any port 5432` (if previously denied)."
+      "rollback_procedure": "Revert NSG/Security Group/Firewall rules to the previous configuration, allowing broader access if necessary. Example (AWS CLI): `aws ec2 revoke-security-group-ingress --group-id sg-xxxxxxxx --protocol tcp --port 443 --cidr <previous_cidr>`"
     },
     {
       "step": 2,
       "phase": "IMMEDIATE",
-      "responsible_team": "DevOps",
-      "action": "Create a full snapshot of the CoreDBServer01 VM/instance and perform a logical backup of all databases. This ensures a recovery point in case of issues during remediation.",
-      "success_criteria": "Confirm the successful creation of the VM/instance snapshot via your cloud provider's console or CLI (e.g., `aws ec2 describe-snapshots --filters Name=tag:Name,Values=CoreDBServer01`). Verify the logical database backup files exist and are accessible (e.g., `/tmp/full_db_backup.sql`).\n```bash\n# Example for PostgreSQL\npg_dumpall --globals-only -U admin_user -f /tmp/globals.sql\npg_dumpall -U admin_user -f /tmp/full_db_backup.sql\nls -lh /tmp/full_db_backup.sql\n```",
+      "responsible_team": "Security Engineering",
+      "action": "Enhance Web Application Firewall (WAF) Rules. Deploy or activate specific WAF rules targeting common OWASP Top 10 vulnerabilities (e.g., SQL Injection, Cross-Site Scripting, Broken Authentication attempts, Server-Side Request Forgery) for the CoreBankingAPI endpoint. Prioritize rules that block known attack patterns for banking APIs.",
+      "success_criteria": "Monitor WAF logs for increased blocked requests, indicating rules are active and effective. Verify WAF policy attachment to the CoreBankingAPI's load balancer or API Gateway. Example (AWS WAF CLI): `aws wafv2 get-web-acl --name MyCoreBankingWAF --scope REGIONAL --id <web_acl_id>` and inspect rules.",
       "estimated_time": "30 minutes",
-      "rollback_procedure": "This step is for safety and does not have a direct rollback, but the created snapshot/backup serves as the primary rollback mechanism for subsequent steps."
+      "rollback_procedure": "Disable the newly added or enhanced WAF rules, or revert to the previous WAF policy version. Example (AWS WAF CLI): `aws wafv2 update-web-acl --name MyCoreBankingWAF --scope REGIONAL --id <web_acl_id> --lock-token <token> --default-action Allow` (if previously allowed, or revert specific rules)."
     },
     {
       "step": 3,
       "phase": "IMMEDIATE",
-      "responsible_team": "Backend Team",
-      "action": "Identify the exact version of the database software (assuming PostgreSQL for commands) and any potentially vulnerable extensions or configurations related to CVE-2024-21762. (Simulated CVE: RCE in PostgreSQL < 14.10, < 15.5, < 16.1).",
-      "success_criteria": "Output of the following commands confirms the current PostgreSQL version and presence of relevant extensions:\n```bash\npsql -U admin_user -c \"SELECT version();\"\n# Expected output: PostgreSQL 1X.Y (e.g., 14.9) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0, 64-bit\npsql -U admin_user -c \"SELECT * FROM pg_available_extensions WHERE name = 'pg_stat_statements';\"\n# Check if pg_stat_statements is installed and enabled\ngrep -r \"pg_stat_statements\" /etc/postgresql/*/main/postgresql.conf\n```",
-      "estimated_time": "5 minutes",
-      "rollback_procedure": "N/A (information gathering)."
+      "responsible_team": "DevOps",
+      "action": "Implement Aggressive Rate Limiting. Configure API Gateway or Load Balancer to enforce aggressive rate limiting on all CoreBankingAPI endpoints, especially authentication, account lookup, and transaction initiation endpoints. This mitigates brute-force attacks and denial-of-service attempts. Example: 10 requests/minute per IP for login, 100 requests/minute for general API calls.",
+      "success_criteria": "Test rate limiting by sending a burst of requests from a single IP address and verify that subsequent requests are throttled or blocked. Monitor API Gateway/Load Balancer metrics for rate limit enforcement. Example (Nginx config check): `grep 'limit_req_zone' /etc/nginx/nginx.conf` and `grep 'limit_req' /etc/nginx/sites-available/corebankingapi`.",
+      "estimated_time": "20 minutes",
+      "rollback_procedure": "Revert rate limiting configurations to their previous, less restrictive settings. This might involve updating API Gateway stages or load balancer listener rules."
     },
     {
       "step": 4,
       "phase": "SHORT-TERM",
       "responsible_team": "Backend Team",
-      "action": "Apply the vendor-provided patch by upgrading the PostgreSQL database to a version that remediates CVE-2024-21762 (e.g., 14.10, 15.5, 16.1 or newer). This is the primary fix.",
-      "success_criteria": "After the upgrade, verify the PostgreSQL version is updated to a patched version. Test application connectivity and basic database operations.\n```bash\n# Stop applications connecting to DB\nsudo systemctl stop <application_service_1> <application_service_2>\n# Stop PostgreSQL\nsudo systemctl stop postgresql\n# Update package lists and upgrade PostgreSQL (example for Debian/Ubuntu)\nsudo apt update\nsudo apt install --only-upgrade postgresql-<current_major_version> postgresql-client-<current_major_version>\n# If a major version upgrade is required, follow PostgreSQL's official upgrade guide (e.g., pg_upgradecluster for Debian/Ubuntu).\n# Start PostgreSQL\nsudo systemctl start postgresql\n# Start applications\nsudo systemctl start <application_service_1> <application_service_2>\n# Verify new version\npsql -U admin_user -c \"SELECT version();\"\n# Expected: PostgreSQL 1X.Y (e.g., 14.10) or newer\n```",
-      "estimated_time": "45 minutes",
-      "rollback_procedure": "If the upgrade fails or causes critical issues, immediately restore CoreDBServer01 from the VM snapshot taken in Step 2. Alternatively, if only the database was affected, restore from the logical database backup."
+      "action": "Conduct Focused Code Review for Authentication, Authorization, and Input Validation. Developers must immediately review the CoreBankingAPI codebase, focusing on: 1. **Authentication**: Token validation, session management, credential handling. 2. **Authorization**: Role-Based Access Control (RBAC) or Attribute-Based Access Control (ABAC) checks on all critical endpoints. 3. **Input Validation**: Strict server-side validation for all incoming request parameters, headers, and body content to prevent injection attacks (SQLi, Command Injection, XSS). Prioritize endpoints with high risk scores or handling sensitive data.",
+      "success_criteria": "Code review sign-off by a peer and a security engineer. Unit and integration tests for authentication, authorization, and input validation logic pass. Example code change (Java Spring Boot): \n```java\n// Before (potentially vulnerable input handling)\n// String userId = request.getParameter(\"userId\");\n\n// After (with input validation and sanitization)\n@PostMapping(\"/transfer\")\n@PreAuthorize(\"hasRole('USER') and @securityService.canAccessAccount(authentication.principal.username, #transferRequest.sourceAccountId)\")\npublic ResponseEntity<String> transferFunds(@Valid @RequestBody TransferRequest transferRequest) {\n    // ... business logic ...\n}\n\n// Example TransferRequest DTO with validation annotations\npublic class TransferRequest {\n    @NotBlank @Pattern(regexp = \"^[0-9]{12}$\")\n    private String sourceAccountId;\n    @Min(1) @Max(1000000)\n    private BigDecimal amount;\n    // ... other fields ...\n}\n```",
+      "estimated_time": "4 hours",
+      "rollback_procedure": "Revert code changes to the previous stable version via Git. This should only be done if the new code introduces critical bugs, and the security implications are understood and accepted."
     },
     {
       "step": 5,
       "phase": "SHORT-TERM",
       "responsible_team": "Backend Team",
-      "action": "Review and harden the PostgreSQL configuration (`postgresql.conf`). Specifically, ensure `listen_addresses` is set to specific trusted IPs or `localhost` if behind a proxy, disable any unused or vulnerable extensions, and enforce strong authentication (e.g., `scram-sha-256`).",
-      "success_criteria": "Verify `postgresql.conf` changes are applied and PostgreSQL restarts successfully. Check listening addresses and authentication methods.\n```bash\n# Edit postgresql.conf (e.g., /etc/postgresql/16/main/postgresql.conf)\n# Set listen_addresses to specific IPs or 'localhost' if behind a proxy\n# listen_addresses = 'localhost'\n# Ensure password_encryption is scram-sha-256\n# password_encryption = scram-sha-256\n# Restart PostgreSQL\nsudo systemctl restart postgresql\n# Verify listening addresses\nsudo netstat -tulnp | grep 5432\n# Expected: 127.0.0.1:5432 or specific trusted IPs\n```",
-      "estimated_time": "20 minutes",
-      "rollback_procedure": "Revert changes made to `postgresql.conf` by restoring the previous version of the file (if backed up) or manually editing it back. Then, restart PostgreSQL: `sudo systemctl restart postgresql`."
+      "action": "Update Dependencies and Libraries. Scan the CoreBankingAPI project for outdated or vulnerable third-party libraries and dependencies using tools like OWASP Dependency-Check, Snyk, or Trivy. Update all identified vulnerable dependencies to their latest stable, secure versions. Rebuild and redeploy the API.",
+      "success_criteria": "Dependency scan reports show no critical or high-severity vulnerabilities. Successful build and deployment of the updated API. Example (Maven): `mvn versions:display-dependency-updates` then update `pom.xml` and `mvn clean install`. Example (npm): `npm audit` then `npm update`.",
+      "estimated_time": "2 hours",
+      "rollback_procedure": "Revert `pom.xml`, `package.json`, or equivalent dependency configuration files to the previous state via version control. Redeploy the older version of the API."
     },
     {
       "step": 6,
-      "phase": "SHORT-TERM",
+      "phase": "LONG-TERM",
       "responsible_team": "DevOps",
-      "action": "Gradually re-enable network access to CoreDBServer01, ensuring that only authorized application servers and administration hosts can connect. This should be based on the principle of least privilege.",
-      "success_criteria": "Verify that only the explicitly allowed IP addresses can connect to CoreDBServer01's database port. Use `nmap` or `telnet` from both authorized and unauthorized hosts to confirm the rules are correctly applied.\n```bash\nnmap -p 5432 CoreDBServer01_IP # From an authorized host, should show port open\nnmap -p 5432 CoreDBServer01_IP # From an unauthorized host, should show port closed/filtered\n```",
-      "estimated_time": "10 minutes",
-      "rollback_procedure": "Re-apply the full network isolation rules from Step 1 if any issues or unauthorized access attempts are detected."
+      "action": "Implement Principle of Least Privilege for Service Accounts. Review and restrict permissions for all service accounts used by CoreBankingAPI (e.g., database connections, message queues, external API calls). Ensure each account has only the minimum necessary permissions to perform its function. Rotate credentials for these accounts.",
+      "success_criteria": "Audit reports confirm adherence to least privilege. Successful API operation with restricted permissions. Example (PostgreSQL): `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM corebanking_user; GRANT SELECT, INSERT, UPDATE ON TABLE accounts TO corebanking_user;`",
+      "estimated_time": "8 hours (initial audit and implementation)",
+      "rollback_procedure": "Revert permission changes to service accounts. This should be done cautiously, as it might reintroduce security risks."
     },
     {
       "step": 7,
       "phase": "LONG-TERM",
       "responsible_team": "Security Engineering",
-      "action": "Integrate CoreDBServer01 into an automated vulnerability scanning solution (e.g., Nessus, Qualys, Trivy, OpenVAS) to regularly scan for OS and database-specific vulnerabilities. Configure alerts for any critical findings.",
-      "success_criteria": "A successful vulnerability scan report for CoreDBServer01 is generated, showing no critical or high-severity vulnerabilities related to the database or its underlying OS. Alerts are configured and tested to ensure notifications for new findings.",
-      "estimated_time": "60 minutes",
-      "rollback_procedure": "Remove CoreDBServer01 from the vulnerability scanner's target list and disable any associated alerts."
-    },
-    {
-      "step": 8,
-      "phase": "LONG-TERM",
-      "responsible_team": "Backend Team",
-      "action": "Audit all database users and roles on CoreDBServer01. Revoke unnecessary privileges and ensure applications connect with the minimum required permissions (principle of least privilege). Update application connection strings if new, restricted users are created.",
-      "success_criteria": "An audit report confirms that all database users and application roles have only the necessary permissions. Test application functionality to ensure no regressions due to privilege changes.\n```bash\n# Example for PostgreSQL\npsql -U admin_user -c \"SELECT usename, rolname, rolsuper, rolcreaterole, rolcreatedb FROM pg_user JOIN pg_authid ON pg_user.usesysid = pg_authid.oid;\"\npsql -U admin_user -c \"\\dp\"\n# Revoke unnecessary privileges\npsql -U admin_user -c \"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM public;\"\npsql -U admin_user -c \"REVOKE ALL ON DATABASE <db_name> FROM <user_name>;\"\npsql -U admin_user -c \"GRANT SELECT ON TABLE <table_name> TO <app_user>;\"\n```",
-      "estimated_time": "90 minutes",
-      "rollback_procedure": "Re-grant previously revoked privileges based on pre-audit records or database backup if application functionality is severely impacted. This may require restoring from a backup if changes are complex."
+      "action": "Integrate Automated Security Testing into CI/CD. Implement Static Application Security Testing (SAST) and Dynamic Application Security Testing (DAST) tools into the CoreBankingAPI's CI/CD pipeline. Configure pipelines to fail builds if critical vulnerabilities are detected, enforcing a 'security-first' development approach.",
+      "success_criteria": "SAST/DAST scans run automatically on every code commit/build. Reports are generated, and critical findings block deployment. Example (Jenkinsfile snippet): \n```groovy\nstage('SAST Scan') {\n    steps {\n        script {\n            sh 'sast-tool scan --project CoreBankingAPI --fail-on-critical'\n        }\n    }\n}\nstage('DAST Scan') {\n    steps {\n        script {\n            sh 'dast-tool scan --url ${COREBANKING_API_URL} --fail-on-high'\n        }\n    }\n}\n```",
+      "estimated_time": "16 hours (initial setup and configuration)",
+      "rollback_procedure": "Disable SAST/DAST steps in the CI/CD pipeline configuration. This will remove automated security gates."
     }
   ],
-  "total_remediation_time": "120 minutes",
+  "total_remediation_time": "24 hours (for immediate and short-term critical fixes)",
   "risk_level_before": "Critical",
   "risk_level_after": "Low",
   "validation_checklist": [
-    "Network access to CoreDBServer01's database port is restricted to authorized IPs only.",
-    "CoreDBServer01 VM snapshot and logical database backups are successfully created and verified.",
-    "PostgreSQL database on CoreDBServer01 is upgraded to a patched version (e.g., 14.10, 15.5, 16.1 or newer) for CVE-2024-21762.",
-    "PostgreSQL configuration (`postgresql.conf`) is hardened, with `listen_addresses` restricted and strong authentication enforced.",
-    "All critical application functionalities connecting to CoreDBServer01 are verified post-remediation.",
-    "Automated vulnerability scanning is configured and shows no critical/high findings for CoreDBServer01.",
-    "Database user and role privileges on CoreDBServer01 adhere to the principle of least privilege."
+    "Network access to CoreBankingAPI is restricted to authorized internal services/IPs.",
+    "WAF logs show active blocking of suspicious requests targeting CoreBankingAPI.",
+    "Rate limiting is actively throttling excessive requests to CoreBankingAPI endpoints.",
+    "Code review for authentication, authorization, and input validation has been completed and necessary patches applied.",
+    "All critical and high-severity vulnerable dependencies in CoreBankingAPI are updated.",
+    "Service accounts for CoreBankingAPI operate with the principle of least privilege.",
+    "Automated SAST/DAST scans are integrated into the CI/CD pipeline for CoreBankingAPI."
   ],
-  "risk_score": 72.4,
+  "risk_score": 65.4,
   "severity_level": "HIGH",
-  "blast_radius_context": 1
+  "blast_radius_context": 83
 }

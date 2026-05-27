@@ -9,6 +9,7 @@ from typing import Optional, List, Dict, Any
 import logging
 from datetime import datetime
 from red_agent import RedAgent
+from blue_agent import BlueAgent
 from config import PRODUCTION_GRAPH, SIMULATION_GRAPH, DEFAULT_GRAPH
 
 # Configure logging
@@ -60,28 +61,35 @@ class RedAgentResponse(BaseModel):
 
 # Global Red Agent instance
 red_agent = None
+blue_agent = None
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Red Agent on startup"""
-    global red_agent
+    """Initialize Red Agent and Blue Agent on startup"""
+    global red_agent, blue_agent
     try:
         red_agent = RedAgent()
-        logger.info("Red Agent initialized successfully")
+        blue_agent = BlueAgent()
+        logger.info("Red Agent and Blue Agent initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize Red Agent: {str(e)}")
+        logger.error(f"Failed to initialize agents: {str(e)}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    global red_agent
+    global red_agent, blue_agent
     if red_agent and hasattr(red_agent, 'neo4j'):
         # Close Neo4j connection if it has a close method
         if hasattr(red_agent.neo4j, 'close'):
             red_agent.neo4j.close()
         logger.info("Red Agent closed")
+    
+    if blue_agent and hasattr(blue_agent, 'neo4j'):
+        if hasattr(blue_agent.neo4j, 'close'):
+            blue_agent.neo4j.close()
+        logger.info("Blue Agent closed")
 
 
 @app.get("/health", response_model=HealthCheckResponse)
@@ -474,6 +482,148 @@ async def generate_remediation_playbook(attack_vector: Dict[str, Any], server_pr
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Blue Agent Endpoints
+@app.post("/api/blue-agent/remediation-playbook")
+async def blue_agent_generate_playbook(attack_vector: Dict[str, Any], server_properties: Dict[str, Any], risk_context: Optional[Dict[str, Any]] = None):
+    """
+    Blue Agent: Generate remediation playbook with risk-aware severity levels
+    
+    Args:
+        attack_vector: The attack vector to remediate
+        server_properties: Properties of the affected server (including risk_score)
+        risk_context: Optional risk context (blast_radius_count, etc.)
+    
+    Returns:
+        Risk-aware remediation playbook with severity level
+    """
+    try:
+        if not blue_agent:
+            raise HTTPException(status_code=503, detail="Blue Agent not initialized")
+        
+        playbook = blue_agent.generate_playbook(
+            attack_vector=attack_vector,
+            server_properties=server_properties,
+            risk_context=risk_context
+        )
+        
+        return {
+            "status": "success",
+            "playbook": playbook,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to generate blue agent playbook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/blue-agent/isolate/{graph}/{server_name}")
+async def blue_agent_isolate_node(graph: str, server_name: str):
+    """
+    Blue Agent: Isolate a compromised node by removing all its edges
+    Prevents the node from affecting other systems
+    
+    Args:
+        graph: Graph name ("prod" or "sim")
+        server_name: Name of the server to isolate
+    
+    Returns:
+        Isolation result with edges deleted and risk scores
+    """
+    try:
+        if not blue_agent:
+            raise HTTPException(status_code=503, detail="Blue Agent not initialized")
+        
+        if graph not in [PRODUCTION_GRAPH, SIMULATION_GRAPH]:
+            raise HTTPException(status_code=400, detail=f"Invalid graph: {graph}")
+        
+        result = blue_agent.apply_fix(server_name=server_name, graph_name=graph)
+        
+        return {
+            "status": "success",
+            "isolation_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to isolate node: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/blue-agent/threats/{graph}")
+async def blue_agent_analyze_threats(graph: str = PRODUCTION_GRAPH):
+    """
+    Blue Agent: Analyze threats - identify high-risk nodes requiring remediation
+    Returns prioritized list of threats with severity levels based on risk scores
+    
+    Args:
+        graph: Graph name ("prod" or "sim")
+    
+    Returns:
+        Prioritized threats with risk scores and severity levels
+    """
+    try:
+        if not blue_agent:
+            raise HTTPException(status_code=503, detail="Blue Agent not initialized")
+        
+        if graph not in [PRODUCTION_GRAPH, SIMULATION_GRAPH]:
+            raise HTTPException(status_code=400, detail=f"Invalid graph: {graph}")
+        
+        result = blue_agent.analyze_threats(graph_name=graph)
+        
+        return {
+            "status": result.get("status"),
+            "graph": graph,
+            "threats_count": result.get("threats_count", 0),
+            "threats": result.get("threats", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to analyze threats: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/blue-agent/isolation-impact/{graph}/{server_name}")
+async def blue_agent_isolation_impact(graph: str, server_name: str):
+    """
+    Blue Agent: Analyze impact of isolating a specific node
+    Shows how many nodes depend on this server and risk reduction
+    
+    Args:
+        graph: Graph name ("prod" or "sim")
+        server_name: Name of the server to analyze
+    
+    Returns:
+        Impact analysis with affected nodes and risk reduction estimate
+    """
+    try:
+        if not blue_agent:
+            raise HTTPException(status_code=503, detail="Blue Agent not initialized")
+        
+        if graph not in [PRODUCTION_GRAPH, SIMULATION_GRAPH]:
+            raise HTTPException(status_code=400, detail=f"Invalid graph: {graph}")
+        
+        result = blue_agent.get_isolation_impact(server_name=server_name, graph_name=graph)
+        
+        return {
+            "status": result.get("status"),
+            "server_name": server_name,
+            "graph": graph,
+            "current_risk_score": result.get("current_risk_score"),
+            "severity_level": result.get("severity_level"),
+            "affected_nodes_count": result.get("affected_nodes_count", 0),
+            "isolation_recommended": result.get("isolation_recommended", False),
+            "affected_nodes": result.get("affected_nodes", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to analyze isolation impact: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API documentation"""
@@ -481,9 +631,8 @@ async def root():
         "project": "Caught U!",
         "version": "1.0.0",
         "description": "Generative AI-powered cybersecurity platform for banking",
-        "endpoints": {
-            "health": "GET /health",
-            "analyze_attack_vectors_get": "GET /analyze-attack-vectors?graph=sim",
+        "red_agent_endpoints": {
+            "analyze_attack_vectors_get": "GET /analyze-attack-vectors?graph=prod",
             "analyze_attack_vectors_post": "POST /api/red-agent/analyze",
             "get_servers": "GET /api/red-agent/servers/{graph}",
             "get_vulnerabilities": "GET /api/red-agent/vulnerabilities/{graph}",
@@ -491,10 +640,20 @@ async def root():
             "get_high_criticality_servers": "GET /api/red-agent/high-criticality-servers/{graph}",
             "get_products": "GET /api/red-agent/products",
             "get_cves": "GET /api/red-agent/cves/{product}",
-            "generate_playbook": "POST /api/red-agent/remediation-playbook"
+            "red_agent_playbook": "POST /api/red-agent/remediation-playbook"
+        },
+        "blue_agent_endpoints": {
+            "analyze_threats": "GET /api/blue-agent/threats/{graph}",
+            "isolation_impact": "GET /api/blue-agent/isolation-impact/{graph}/{server_name}",
+            "blue_agent_playbook": "POST /api/blue-agent/remediation-playbook",
+            "blue_agent_isolate": "POST /api/blue-agent/isolate/{graph}/{server_name}"
+        },
+        "utility_endpoints": {
+            "health": "GET /health"
         },
         "documentation": "/docs"
     }
+
 
 
 if __name__ == "__main__":

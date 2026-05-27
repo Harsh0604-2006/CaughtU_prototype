@@ -3,21 +3,87 @@
   "graph": "prod",
   "schema_discovered": 20,
   "cypher_executed": true,
-  "results_found": 0,
+  "results_found": 24,
   "attack_report": {
-    "entry_point": "No exploitable entry point found",
-    "cve_used": "No initial exploit identified",
-    "attack_steps": [],
-    "highest_value_target": "No critical target reachable",
-    "blast_radius_count": 0,
-    "overall_severity": "LOW",
+    "entry_point": "CoreBankingAPI",
+    "cve_used": "Unknown",
+    "attack_steps": [
+      {
+        "step": 1,
+        "action": "Initial compromise",
+        "target_node": "CoreBankingAPI",
+        "result": "Access gained"
+      }
+    ],
+    "highest_value_target": "UPIGateway",
+    "blast_radius_count": 24,
+    "overall_severity": "HIGH",
     "recommended_defenses": [
-      "Maintain continuous vulnerability scanning and patch management across all assets.",
-      "Ensure robust network segmentation to limit lateral movement potential, even if no current path is found.",
-      "Implement strong access controls and least privilege principles for all users and services.",
-      "Regularly review security configurations and audit logs for anomalous activity.",
-      "Conduct regular penetration testing and red team exercises to proactively identify potential attack paths."
+      "Apply security patches",
+      "Enable monitoring",
+      "Review access controls"
     ]
   },
-  "raw_query_results": []
+  "raw_query_results": [
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "UPIGateway",
+      "target_risk": 58.8
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "WhatsAppBankingGateway",
+      "target_risk": 54.8
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "VoiceBankingGateway",
+      "target_risk": 54.8
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "InvestmentMgmt",
+      "target_risk": 58.4
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "LiquidityMgmt",
+      "target_risk": 58.4
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "ALMSystem",
+      "target_risk": 59.4
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "GeneralLedgerServer",
+      "target_risk": 59.4
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "MsgBroker01",
+      "target_risk": 58.4
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "APIGateway",
+      "target_risk": 56.8
+    },
+    {
+      "entry_point": "CoreBankingAPI",
+      "entry_risk": 65.4,
+      "target": "PrimaryDataCenter",
+      "target_risk": 62.4
+    }
+  ]
 }
