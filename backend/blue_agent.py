@@ -30,26 +30,22 @@ class BlueAgent:
         result = self.llm.generate_remediation_playbook(attack_vector, server_properties)
         return result
         
-    def apply_fix_simulation(self, server_name: str, graph_name: str = SIMULATION_GRAPH) -> bool:
+    def apply_fix(self, server_name: str, graph_name: str = PRODUCTION_GRAPH) -> bool:
         """
-        Apply fix on simulation graph by isolating the compromised node.
-        Deletes CONNECTS_TO edges so it can't affect other nodes.
+        Apply fix on the specified graph by isolating the compromised node.
+        Deletes CONNECTS_TO OR any other edges so it can't affect other nodes.
         
         Args:
             server_name: Name of the server to isolate
-            graph_name: Target graph, defaults to 'sim'
+            graph_name: Target graph, defaults to 'prod'
             
         Returns:
             Boolean indicating success
         """
-        if graph_name == PRODUCTION_GRAPH:
-            logger.warning("Attempted to run apply_fix_simulation on PRODUCTION_GRAPH! Denied.")
-            return False
-            
         logger.info(f"Blue Agent applying fix to {graph_name} graph for server {server_name}")
         
         query = f"""
-        MATCH (s:Server {{name: $server_name, graph: '{graph_name}'}})-[r:CONNECTS_TO]-()
+        MATCH (s:Server {{name: $server_name, graph: '{graph_name}'}})-[r]-()
         DELETE r
         SET s.status = 'Isolated'
         SET s.compromised = true

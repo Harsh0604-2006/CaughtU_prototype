@@ -4,7 +4,7 @@ Test script for LangGraph Orchestrator and Blue Agent
 import logging
 import json
 from orchestrator import Orchestrator
-from config import SIMULATION_GRAPH
+from config import PRODUCTION_GRAPH
 
 # Setup logging
 logging.basicConfig(
@@ -27,22 +27,18 @@ def run_test():
         print("[*] Initializing Orchestrator with memory checkpointer...")
         orchestrator = Orchestrator()
         
-        # We need to recompile the graph with a checkpointer to use get_state and interrupts properly
-        memory = MemorySaver()
-        orchestrator.graph = orchestrator._build_graph().with_config(checkpointer=memory)
-        
-        # We will use AUTH-03 since it's the primary attack entry point for INC001
-        target_server = "AUTH-03"
+        # We will use CoreDBServer01 since it's highly connected and vulnerable
+        target_server = "CoreDBServer01"
         
         # 2. Start the cycle until it interrupts for HUMAN_REVIEW
-        print(f"\n[*] Starting Dual-Loop Cycle for {target_server} on {SIMULATION_GRAPH}...")
+        print(f"\n[*] Starting Dual-Loop Cycle for {target_server} on {PRODUCTION_GRAPH}...")
         
         config = {"configurable": {"thread_id": "test_session_1"}}
         
         # Stream the graph execution until it hits the interrupt
         initial_state = {
             "server_name": target_server,
-            "target_graph": SIMULATION_GRAPH,
+            "target_graph": PRODUCTION_GRAPH,
             "incident_details": {},
             "blast_radius": [],
             "red_agent_output": {},
@@ -60,9 +56,15 @@ def run_test():
                     print(f"     Blast radius size: {len(state_update.get('blast_radius', []))} nodes")
                 elif node_name == "RED_AGENT_REPORT":
                     print(f"     Red Agent Output received.")
+                    with open('red_agent_report.json', 'w') as f:
+                        json.dump(state_update.get("red_agent_output", {}), f, indent=2)
+                    print(f"     [+] Saved full Red Agent report to 'red_agent_report.json'")
                 elif node_name == "BLUE_AGENT_PLAN":
                     playbook = state_update.get("blue_playbook", {})
                     print(f"     Blue Agent Playbook generated.")
+                    with open('blue_agent_playbook.json', 'w') as f:
+                        json.dump(playbook, f, indent=2)
+                    print(f"     [+] Saved full Blue Agent playbook to 'blue_agent_playbook.json'")
         
         print("\n[*] Graph paused for HUMAN_REVIEW.")
         
@@ -83,7 +85,9 @@ def run_test():
         user_input = {"human_approved": True}
         
         try:
-            for event in orchestrator.graph.stream(user_input, config, as_node="HUMAN_REVIEW"):
+            # Tell LangGraph to update the state in the current thread and then resume execution
+            orchestrator.graph.update_state(config, user_input)
+            for event in orchestrator.graph.stream(None, config):
                  for node_name, state_update in event.items():
                     print(f"  -> Completed state: {node_name}")
                     if node_name == "RETEST":
@@ -91,8 +95,8 @@ def run_test():
         except Exception as e:
              logger.error(f"Failed to resume graph from checkpointer: {e}")
              # fallback to manual step since checkpointer is failing locally
-             orchestrator.apply_fix({"server_name": target_server, "target_graph": SIMULATION_GRAPH})
-             res = orchestrator.retest({"server_name": target_server, "target_graph": SIMULATION_GRAPH})
+             orchestrator.apply_fix({"server_name": target_server, "target_graph": PRODUCTION_GRAPH})
+             res = orchestrator.retest({"server_name": target_server, "target_graph": PRODUCTION_GRAPH})
              print(f"     Retest Blast radius size: {len(res.get('retest_blast_radius', []))} nodes (fallback)")
                      
         print("\n[*] Cycle Complete!")

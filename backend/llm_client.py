@@ -133,7 +133,7 @@ Be specific with server names and CVE identifiers from the data provided."""
         server_properties: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Generate a human-executable remediation playbook
+        Generate a developer-friendly remediation playbook
         
         Args:
             attack_vector: The attack vector to remediate
@@ -143,9 +143,9 @@ Be specific with server names and CVE identifiers from the data provided."""
             Structured remediation steps
         """
         
-        prompt = f"""You are a bank security operations center (SOC) analyst.
+        prompt = f"""You are an expert DevSecOps engineer and developer.
 A specific attack vector has been identified on a critical server.
-Generate a step-by-step REMEDIATION PLAYBOOK that the security team can execute.
+Generate a step-by-step DEVELOPER-FRIENDLY REMEDIATION PLAYBOOK.
 
 ATTACK VECTOR:
 - Target Server: {attack_vector.get('target_server')}
@@ -158,22 +158,24 @@ SERVER PROPERTIES:
 {json.dumps(server_properties, indent=2)}
 
 OUTPUT REQUIREMENTS:
-1. Each step must be HUMAN-EXECUTABLE (not code, but clear instructions)
-2. Include both IMMEDIATE and LONG-TERM fixes
-3. Specify which team should execute each step
-4. Include validation/testing steps
-5. Provide rollback procedures if needed
+1. Each step must be highly TECHNICAL and DEVELOPER-FRIENDLY.
+2. Provide concrete commands, configuration edits, or code updates needed to patch vulnerabilities.
+3. Include both IMMEDIATE workarounds (e.g., isolating network/disabling features) and LONG-TERM fixes (e.g., upgrading package versions).
+4. Specify which technical team should execute each step (e.g., Platform Team, Backend Developers, DevOps).
+5. Provide clear validation commands (e.g., bash/cli commands to verify the fix).
+6. Provide rollback procedures if needed.
 
-Format as JSON:
+CRITICAL: You MUST return ONLY valid, parseable JSON. Do NOT include any conversational introduction, explanations, or Markdown formatting. Just output the raw JSON object starting with {{ and ending with }}.
+
 {{
   "playbook": [
     {{
       "step": 1,
       "phase": "IMMEDIATE" | "SHORT-TERM" | "LONG-TERM",
-      "responsible_team": "Network Team | Security Team | DBA | DevOps",
-      "action": "Clear instruction for human execution",
-      "success_criteria": "How to verify step succeeded",
-      "estimated_time": "5 minutes",
+      "responsible_team": "DevOps | Backend Team | Security Engineering",
+      "action": "Detailed technical instruction, including CLI commands or code changes if applicable",
+      "success_criteria": "Commands or checks to verify the fix",
+      "estimated_time": "15 minutes",
       "rollback_procedure": "How to undo if needed"
     }}
   ],
@@ -187,8 +189,8 @@ Format as JSON:
             response = self.client.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=3000,
-                    temperature=0.7,
+                    max_output_tokens=8192,
+                    temperature=0.0, # Lower temperature to prevent unstructured intros
                 )
             )
             
@@ -196,11 +198,20 @@ Format as JSON:
             
             # Extract JSON
             try:
-                json_start = response_text.find('{')
-                json_end = response_text.rfind('}') + 1
+                # Clean the response text by removing markdown if it exists
+                clean_text = response_text
+                if clean_text.strip().startswith('```json'):
+                    clean_text = clean_text.strip()[7:]
+                elif clean_text.strip().startswith('```'):
+                     clean_text = clean_text.strip()[3:]
+                if clean_text.strip().endswith('```'):
+                    clean_text = clean_text.strip()[:-3]
+                    
+                json_start = clean_text.find('{')
+                json_end = clean_text.rfind('}') + 1
                 
                 if json_start != -1 and json_end > json_start:
-                    json_str = response_text[json_start:json_end]
+                    json_str = clean_text[json_start:json_end]
                     result = json.loads(json_str)
                 else:
                     result = {"raw_response": response_text}
