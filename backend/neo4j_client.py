@@ -35,20 +35,18 @@ class Neo4jClient:
         Returns:
             List of node dictionaries with properties
         """
-        # First try Server nodes, fall back to Device nodes
+        # Query for Server nodes and return all available properties
         query = """
-        MATCH (n)
-        WHERE n:Server OR n:Device OR n:Infrastructure
+        MATCH (n:Server)
         RETURN n.name as name,
-               n.product as product,
-               n.version as version,
-               n.ip as ip,
-               n.os as os,
                n.type as type,
-               n.criticality as criticality,
-               n.zone as zone,
+               n.risk_score as risk_score,
+               n.cvss_score as cvss_score,
+               n.blast_radius_count as blast_radius_count,
+               n.exploit_available as exploit_available,
+               n.attack_vector as attack_vector,
+               n.cve_id as cve_id,
                labels(n) as node_type
-        ORDER BY n.criticality DESC
         LIMIT 100
         """
         
@@ -64,7 +62,7 @@ class Neo4jClient:
         Dynamically discover the live Neo4j schema
         
         Returns:
-            Dictionary with node labels, relationship types, and node properties
+            Dictionary with node labels, relationship types, and sample node properties
         """
         try:
             with self.driver.session() as session:
@@ -76,17 +74,20 @@ class Neo4jClient:
                 rel_result = session.run("CALL db.relationshipTypes()")
                 relationship_types = [record[0] for record in rel_result]
                 
-                # Get node properties per label
-                properties_result = session.run("CALL db.schema.nodeTypeProperties()")
+                # Get sample properties per label by querying actual nodes
                 node_properties = {}
-                for record in properties_result:
-                    label = record["nodeType"]
-                    if label not in node_properties:
+                for label in labels:
+                    try:
+                        query = f"MATCH (n:{label}) RETURN keys(n) as props LIMIT 1"
+                        result = session.run(query)
+                        record = result.single()
+                        if record and record["props"]:
+                            node_properties[label] = record["props"]
+                        else:
+                            node_properties[label] = []
+                    except Exception as e:
+                        logger.warning(f"Could not get properties for {label}: {str(e)}")
                         node_properties[label] = []
-                    node_properties[label].append({
-                        "property": record["property"],
-                        "type": record["type"]
-                    })
                 
                 schema = {
                     "node_labels": labels,
@@ -182,10 +183,9 @@ class Neo4jClient:
         MATCH (start {name: $server_name})
         MATCH (start)-[*1..5]->(affected)
         RETURN DISTINCT affected.name as name,
-                        labels(affected) as labels,
-                        affected.criticality as criticality,
-                        affected.type as type
-        ORDER BY affected.criticality DESC
+                        affected.type as type,
+                        affected.risk_score as risk_score,
+                        labels(affected) as labels
         LIMIT 100
         """
         
@@ -198,7 +198,7 @@ class Neo4jClient:
     
     def get_high_criticality_servers(self, graph_name: str = PRODUCTION_GRAPH) -> List[Dict[str, Any]]:
         """
-        Fetch high/critical criticality nodes from any schema
+        Fetch high-risk nodes based on risk_score
         
         Args:
             graph_name: Either "prod" or "sim"
@@ -207,16 +207,14 @@ class Neo4jClient:
             List of high-priority nodes
         """
         query = """
-        MATCH (n)
-        WHERE n.criticality IN ["Critical", "High", "CRITICAL", "HIGH"]
+        MATCH (n:Server)
+        WHERE n.risk_score >= 60
         RETURN n.name as name,
-               n.product as product,
-               n.version as version,
-               n.ip as ip,
                n.type as type,
-               n.criticality as criticality,
+               n.risk_score as risk_score,
+               n.cvss_score as cvss_score,
                labels(n) as node_type
-        ORDER BY n.criticality DESC, n.name
+        ORDER BY n.risk_score DESC
         LIMIT 100
         """
         

@@ -1,6 +1,6 @@
 """
 LangGraph Orchestrator for Caught U!
-Manages the state machine for the Dual-Loop Architecture.
+Manages the state machine for the Dual-Loop Architecture with Dynamic Risk Scoring.
 States:
 1. MAP_BLAST_RADIUS
 2. RED_AGENT_REPORT
@@ -8,6 +8,8 @@ States:
 4. HUMAN_REVIEW
 5. APPLY_FIX
 6. RETEST
+
+Integrates dynamic risk scoring from nvd_sync.py and risk_calculator.py
 """
 from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, END
@@ -22,6 +24,7 @@ logger = logging.getLogger(__name__)
 class AgentState(TypedDict):
     """
     State representing the context of a simulation or live defense loop cycle.
+    Includes dynamic risk scoring metadata.
     """
     server_name: str
     target_graph: str
@@ -31,6 +34,8 @@ class AgentState(TypedDict):
     blue_playbook: Dict[str, Any]
     human_approved: bool
     retest_blast_radius: List[Dict[str, Any]]
+    risk_score_context: Dict[str, Any]  # NEW: Track risk scoring data
+    fix_result: Dict[str, Any]  # NEW: Track fix application results
 
 class Orchestrator:
     def __init__(self):
@@ -106,8 +111,22 @@ class Orchestrator:
         servers = self.neo4j.get_servers(graph_name=state["target_graph"])
         server_props = next((s for s in servers if s['name'] == state["server_name"]), {"name": state["server_name"]})
         
-        playbook = self.blue_agent.generate_playbook(attack_vector, server_props)
-        return {"blue_playbook": playbook}
+        # Create risk context for playbook generation (NEW: Dynamic Risk Scoring)
+        risk_context = {
+            "blast_radius_count": len(state["blast_radius"]),
+            "risk_score": server_props.get("risk_score", 0),
+            "cvss_score": server_props.get("cvss_score"),
+            "exploit_available": server_props.get("exploit_available"),
+            "attack_vector_type": server_props.get("attack_vector")
+        }
+        
+        playbook = self.blue_agent.generate_playbook(attack_vector, server_props, risk_context=risk_context)
+        
+        # Track risk context in state
+        return {
+            "blue_playbook": playbook,
+            "risk_score_context": risk_context
+        }
 
     def human_review(self, state: AgentState) -> Dict:
         """State 4: Wait for human approval. The graph execution pauses before this step."""
@@ -123,10 +142,17 @@ class Orchestrator:
         return "rejected"
 
     def apply_fix(self, state: AgentState) -> Dict:
-        """State 5: Apply Cypher mutation on graph."""
+        """State 5: Apply Cypher mutation on graph with risk tracking."""
         logger.info("State: APPLY_FIX")
-        self.blue_agent.apply_fix(state["server_name"], state["target_graph"])
-        return {}
+        fix_result = self.blue_agent.apply_fix(state["server_name"], state["target_graph"])
+        
+        # Log risk score changes
+        if fix_result.get('status') == 'success':
+            logger.info(f"Fix applied: {state['server_name']} isolated on {state['target_graph']}")
+            if fix_result.get('risk_score_before') and fix_result.get('risk_score_after'):
+                logger.info(f"  Risk score change: {fix_result['risk_score_before']} -> {fix_result['risk_score_after']}")
+        
+        return {"fix_result": fix_result}
 
     def retest(self, state: AgentState) -> Dict:
         """State 6: Retest blast radius to compare before/after"""
@@ -135,7 +161,7 @@ class Orchestrator:
         return {"retest_blast_radius": new_affected_nodes}
 
     def run_cycle(self, server_name: str, target_graph: str = SIMULATION_GRAPH) -> Any:
-        """Run the full cycle for a target server and graph."""
+        """Run the full cycle for a target server and graph with dynamic risk scoring context."""
         initial_state = AgentState(
             server_name=server_name,
             target_graph=target_graph,
@@ -144,7 +170,9 @@ class Orchestrator:
             red_agent_output={},
             blue_playbook={},
             human_approved=False,
-            retest_blast_radius=[]
+            retest_blast_radius=[],
+            risk_score_context={},  # NEW: Initialize risk context
+            fix_result={}  # NEW: Initialize fix result
         )
         
         # Execute until the first interrupt (HUMAN_REVIEW)

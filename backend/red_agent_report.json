@@ -1,43 +1,23 @@
 {
   "status": "success",
   "graph": "prod",
-  "nodes_analyzed": 17,
-  "entries_enriched": 1,
-  "high_risk_nodes": [
-    {
-      "server_name": null,
-      "total_vulns": 1,
-      "risk_score": 5.625,
-      "max_cvss": 7.5,
-      "exploitable_vulns": 1
-    }
-  ],
-  "attack_vectors": [],
-  "executive_summary": "",
-  "defensive_priorities": [],
-  "blast_radii_summary": {},
-  "neo4j_relationships": [
-    {
-      "source_name": "LoadBalancer01",
-      "source_type": [
-        "Server"
-      ],
-      "vuln_name": "HTTP/2 Rapid Reset Attack",
-      "cve_id": "CVE-2023-44487",
-      "cvss_score": 7.5,
-      "attack_vector": "Network",
-      "attack_complexity": "Low",
-      "exploit_available": true,
-      "description": "DDoS vulnerability via HTTP/2 rapid stream resets",
-      "all_properties": {
-        "attack_complexity": "Low",
-        "exploit_available": true,
-        "cvss_score": 7.5,
-        "cve_id": "CVE-2023-44487",
-        "name": "HTTP/2 Rapid Reset Attack",
-        "description": "DDoS vulnerability via HTTP/2 rapid stream resets",
-        "attack_vector": "Network"
-      }
-    }
-  ]
+  "schema_discovered": 20,
+  "cypher_executed": true,
+  "results_found": 0,
+  "attack_report": {
+    "entry_point": "No exploitable entry point found",
+    "cve_used": "No initial exploit identified",
+    "attack_steps": [],
+    "highest_value_target": "No critical target reachable",
+    "blast_radius_count": 0,
+    "overall_severity": "LOW",
+    "recommended_defenses": [
+      "Maintain continuous vulnerability scanning and patch management across all assets.",
+      "Ensure robust network segmentation to limit lateral movement potential, even if no current path is found.",
+      "Implement strong access controls and least privilege principles for all users and services.",
+      "Regularly review security configurations and audit logs for anomalous activity.",
+      "Conduct regular penetration testing and red team exercises to proactively identify potential attack paths."
+    ]
+  },
+  "raw_query_results": []
 }

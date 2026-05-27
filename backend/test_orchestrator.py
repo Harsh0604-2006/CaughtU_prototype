@@ -1,5 +1,5 @@
 """
-Test script for LangGraph Orchestrator and Blue Agent
+Test script for LangGraph Orchestrator and Blue Agent with Dynamic Risk Scoring
 """
 import logging
 import json
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def run_test():
     print("\n" + "="*80)
-    print("  Testing LangGraph Orchestrator & Blue Agent")
+    print("  Testing LangGraph Orchestrator & Blue Agent with Dynamic Risk Scoring")
     print("="*80 + "\n")
     
     try:
@@ -32,6 +32,7 @@ def run_test():
         
         # 2. Start the cycle until it interrupts for HUMAN_REVIEW
         print(f"\n[*] Starting Dual-Loop Cycle for {target_server} on {PRODUCTION_GRAPH}...")
+        print("[*] Note: This run uses dynamic risk scoring from nvd_sync.py and risk_calculator.py\n")
         
         config = {"configurable": {"thread_id": "test_session_1"}}
         
@@ -44,7 +45,9 @@ def run_test():
             "red_agent_output": {},
             "blue_playbook": {},
             "human_approved": False,
-            "retest_blast_radius": []
+            "retest_blast_radius": [],
+            "risk_score_context": {},  # NEW: Dynamic risk scoring context
+            "fix_result": {}  # NEW: Fix application result tracking
         }
         
         for event in orchestrator.graph.stream(initial_state, config):
@@ -61,7 +64,9 @@ def run_test():
                     print(f"     [+] Saved full Red Agent report to 'red_agent_report.json'")
                 elif node_name == "BLUE_AGENT_PLAN":
                     playbook = state_update.get("blue_playbook", {})
+                    risk_context = state_update.get("risk_score_context", {})
                     print(f"     Blue Agent Playbook generated.")
+                    print(f"     Risk Context: {risk_context}")  # NEW: Show risk scoring data
                     with open('blue_agent_playbook.json', 'w') as f:
                         json.dump(playbook, f, indent=2)
                     print(f"     [+] Saved full Blue Agent playbook to 'blue_agent_playbook.json'")
@@ -76,8 +81,9 @@ def run_test():
             playbook = {}
         
         print("\n" + "-"*40)
-        print("GENERATED PLAYBOOK PREVIEW:")
-        print(json.dumps(playbook, indent=2)[:500] + "...\n(truncated)")
+        print("GENERATED PLAYBOOK PREVIEW (with Dynamic Risk Scoring):")
+        preview = json.dumps(playbook, indent=2)[:500]
+        print(preview + "...\n(truncated)")
         print("-"*40 + "\n")
         
         # 3. Resume the graph with human approval
@@ -90,12 +96,20 @@ def run_test():
             for event in orchestrator.graph.stream(None, config):
                  for node_name, state_update in event.items():
                     print(f"  -> Completed state: {node_name}")
-                    if node_name == "RETEST":
+                    if node_name == "APPLY_FIX":
+                         fix_result = state_update.get("fix_result", {})
+                         print(f"     Fix Application Result: {fix_result.get('status', 'unknown')}")
+                         if fix_result.get('risk_score_before'):
+                             print(f"     Risk Score Before: {fix_result['risk_score_before']}")
+                         if fix_result.get('risk_score_after'):
+                             print(f"     Risk Score After: {fix_result['risk_score_after']}")
+                    elif node_name == "RETEST":
                          print(f"     Retest Blast radius size: {len(state_update.get('retest_blast_radius', []))} nodes")
         except Exception as e:
              logger.error(f"Failed to resume graph from checkpointer: {e}")
              # fallback to manual step since checkpointer is failing locally
-             orchestrator.apply_fix({"server_name": target_server, "target_graph": PRODUCTION_GRAPH})
+             fix_res = orchestrator.blue_agent.apply_fix(target_server, PRODUCTION_GRAPH)
+             print(f"     Fix Application Result (fallback): {fix_res.get('status', 'unknown')}")
              res = orchestrator.retest({"server_name": target_server, "target_graph": PRODUCTION_GRAPH})
              print(f"     Retest Blast radius size: {len(res.get('retest_blast_radius', []))} nodes (fallback)")
                      

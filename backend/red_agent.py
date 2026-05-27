@@ -280,8 +280,13 @@ Return as valid JSON only, no explanations. Format:
         lines.append("\nNODE PROPERTIES PER LABEL:")
         for label, properties in schema.get("node_properties", {}).items():
             lines.append(f"  {label}:")
+            # Properties can be either strings or dicts (handle both cases)
             for prop in properties:
-                lines.append(f"    - {prop.get('property')} ({prop.get('type')})")
+                if isinstance(prop, dict):
+                    lines.append(f"    - {prop.get('property')} ({prop.get('type')})")
+                else:
+                    # If it's already a string, just use it
+                    lines.append(f"    - {prop}")
         
         return "\n".join(lines)
     
