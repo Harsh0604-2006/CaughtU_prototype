@@ -80,7 +80,7 @@ class Neo4jClient:
         Dynamically discover the live Neo4j schema
         
         Returns:
-            Dictionary with node labels, relationship types, and node properties
+            Dictionary with node labels, relationship types, and sample node properties
         """
         labels = []
         relationship_types = []

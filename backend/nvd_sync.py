@@ -86,7 +86,9 @@ class NVDSync:
                 cves = self.nvd.get_cves_for_product(product)
                 if cves:
                     product_cves[product] = cves
-                    logger.info(f"  {product}: {len(cves)} CVEs found")
+                    logger.info(f"  {product} ({label}): {len(cves)} CVEs found")
+                else:
+                    logger.warning(f"  {product} ({label}): No CVEs found")
             
             logger.info(f"Fetched CVEs for {len(product_cves)} products")
             
@@ -218,7 +220,7 @@ class NVDSync:
                         {
                             "node_name": node_name,
                             "cvss_score": float(highest_cve.get('cvss_score', 0)),
-                            "exploit_available": "true" if highest_cve.get('exploit_available') else "false",
+                            "exploit_available": highest_cve.get('exploit_available', False),
                             "attack_vector": highest_cve.get('attack_vector', 'Unknown'),
                             "cve_id": highest_cve.get('cve_id', 'Unknown'),
                             "product_mapped": product
