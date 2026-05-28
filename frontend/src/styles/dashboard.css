@@ -1559,3 +1559,398 @@
   flex-shrink: 0;
   margin-bottom: 14px;
 }
+/* =====================================================
+   LOGS PANEL FIT FIX + TITLE SIZE TWEAK
+===================================================== */
+
+/* Slightly smaller top title so it fits nicely */
+.top-header h1 {
+  font-size: clamp(22px, 2.8vw, 34px);
+  line-height: 1;
+}
+
+/* Make logs panel use full available height */
+.logs-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+/* Make terminal fill the inside of the logs card */
+.terminal-window {
+  flex: 1;
+  height: auto !important;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* If logs are shown on single-page Logs screen, fill more area */
+.single-page .logs-panel {
+  min-height: calc(100vh - 220px);
+}
+
+.single-page .terminal-window {
+  flex: 1;
+  min-height: 0;
+  height: 100% !important;
+}
+
+/* Keep panel content from getting cut awkwardly */
+.logs-panel .panel-header {
+  flex-shrink: 0;
+}
+/* =====================================================
+   LIVE LOGS FULL HEIGHT FIX
+===================================================== */
+
+.logs-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.logs-panel .panel-header {
+  flex-shrink: 0;
+}
+
+/* Make terminal fill remaining space inside the logs panel */
+.terminal-window {
+  flex: 1;
+  height: auto !important;
+  min-height: 220px;
+  overflow-y: auto;
+}
+
+/* When Logs page is opened from sidebar */
+.dashboard-grid.single-page {
+  min-height: calc(100vh - 140px);
+}
+
+.single-page .logs-panel {
+  height: calc(100vh - 170px);
+  min-height: 500px;
+}
+
+.single-page .terminal-window {
+  flex: 1;
+  height: 100% !important;
+  min-height: 0;
+}
+/* =====================================================
+   BLUE AGENT PAGE ONLY
+===================================================== */
+
+.blue-page {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.blue-page .blue-agent-panel {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  min-height: calc(100vh - 170px);
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+/* =====================================================
+   FINAL HEADER + BLUE AGENT PAGE FIX
+   Paste at the VERY END of dashboard.css
+===================================================== */
+
+/* Makes the top rectangle fully visible and prevents clipping */
+.command-center {
+  height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 18px 22px;
+}
+
+.top-header {
+  width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Keep dashboard content below header */
+.dashboard-grid {
+  height: calc(100vh - 130px);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+/* =====================================================
+   BLUE AGENT PAGE FIX
+===================================================== */
+
+.blue-page {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+
+/* Blue Agent card should fit properly inside page */
+.blue-page .blue-agent-panel {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  min-height: calc(100vh - 160px);
+  max-height: none !important;
+  overflow-y: auto !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Remove inner unnecessary scroll inside Remediation Plan */
+.blue-page .blue-agent-panel .playbook-list {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-right: 0;
+}
+
+/* Keep approve button visible but not covering list */
+.blue-page .approve-visible {
+  position: relative;
+  top: auto;
+  z-index: 1;
+  margin-bottom: 22px;
+}
+
+/* Make playbook steps fit cleanly */
+.blue-page .playbook-list li {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+}
+
+.blue-page .playbook-list li p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Remove awkward bottom blank look */
+.blue-page .blue-panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+/* =====================================================
+   RED AGENT PAGE ONLY
+===================================================== */
+
+.red-page {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+
+.red-page .red-agent-panel {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  min-height: calc(100vh - 160px);
+  max-height: none !important;
+  overflow-y: auto !important;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.red-page .red-report-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.red-page .report-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.red-page .attack-path-box {
+  margin-top: 16px;
+}
+
+.red-page .report-list {
+  margin-top: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Make Red Agent content look balanced */
+.red-page .empty-state {
+  flex: 1;
+  min-height: 420px;
+}
+
+@media (max-width: 900px) {
+  .red-page .report-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .red-page .report-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* =====================================================
+   PIPELINE FULL OVAL VISIBILITY + VERIFIED GREEN FIX
+===================================================== */
+
+.pipeline-panel,
+.pipeline-bar {
+  min-height: 64px;
+  height: auto;
+  overflow: visible !important;
+  align-items: center;
+  padding: 14px 18px;
+}
+
+.pipeline-steps {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: visible !important;
+}
+
+.pipeline-group {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pipeline-step {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 9px 18px;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.pipeline-step.done {
+  color: var(--green) !important;
+  border-color: rgba(34, 255, 153, 0.55) !important;
+  background: rgba(34, 255, 153, 0.09) !important;
+  box-shadow: 0 0 22px rgba(34, 255, 153, 0.18) !important;
+}
+
+.pipeline-step.active {
+  color: var(--cyan) !important;
+  border-color: rgba(0, 229, 255, 0.55) !important;
+  background: rgba(0, 229, 255, 0.08) !important;
+}
+
+.pipeline-step.danger {
+  color: var(--red) !important;
+  border-color: rgba(255, 45, 85, 0.55) !important;
+  background: rgba(255, 45, 85, 0.09) !important;
+}
+
+.pipeline-arrow {
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.pipeline-arrow.done {
+  color: var(--green) !important;
+}
+/* =====================================================
+   TOP HEADER FULL BLOCK FIX
+   Makes CAUGHTU header look like a complete rectangle card
+===================================================== */
+
+.command-center {
+  height: 100vh;
+  padding: 22px 26px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Main header card */
+.top-header {
+  width: 100%;
+  min-height: 125px;
+  padding: 26px 32px;
+  border-radius: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+
+  background:
+    radial-gradient(circle at 88% 30%, rgba(255, 45, 85, 0.14), transparent 34%),
+    linear-gradient(145deg, rgba(18, 21, 31, 0.95), rgba(26, 31, 46, 0.78));
+
+  border: 1px solid rgba(148, 163, 193, 0.18);
+  box-shadow:
+    0 18px 70px rgba(0, 0, 0, 0.34),
+    inset 0 0 28px rgba(255, 255, 255, 0.025);
+
+  backdrop-filter: blur(24px);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Left text area */
+.top-header > div:first-child {
+  min-width: 0;
+}
+
+.top-header .eyebrow {
+  margin-bottom: 12px;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: var(--text-secondary);
+}
+
+.top-header h1 {
+  margin: 0;
+  font-size: clamp(34px, 3.5vw, 54px);
+  line-height: 1;
+  color: var(--text-primary);
+  text-shadow: 0 0 22px rgba(0, 229, 255, 0.22);
+}
+
+/* Right side stats */
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mini-stat,
+.clock-card,
+.status-pill {
+  min-height: 64px;
+  padding: 12px 18px;
+  border-radius: 18px;
+}
+
+/* Content below header should start properly */
+.dashboard-grid {
+  margin-top: 22px;
+  height: calc(100vh - 175px);
+  overflow-y: auto;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .top-header {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: auto;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .dashboard-grid {
+    height: auto;
+  }
+}

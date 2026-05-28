@@ -4,26 +4,42 @@ const steps = [
   "Playbook",
   "Approve",
   "Fix Applied",
-  "Verified"
+  "Verified",
 ];
 
 export default function PipelineBar({ step }) {
   return (
     <section className="pipeline-panel">
-      <span className="pipeline-title">Response Pipeline</span>
+      <p className="pipeline-title">Response Pipeline</p>
+
       <div className="pipeline-steps">
         {steps.map((label, index) => {
-          const done = index < step;
-          const active = index === step;
-          const danger = active && index === 3;
+          let state = "idle";
+
+          if (step >= index) {
+            state = "done";
+          }
+
+          if (step === index && index !== steps.length - 1) {
+            state = index === 3 ? "danger" : "active";
+          }
+
+          if (step >= steps.length - 1 && index === steps.length - 1) {
+            state = "done";
+          }
 
           return (
             <div className="pipeline-group" key={label}>
-              <div className={`pipeline-step ${done ? "done" : ""} ${active ? "active" : ""} ${danger ? "danger" : ""}`}>
-                <span>{done ? "✓" : String(index + 1).padStart(2, "0")}</span>
-                {label}
+              <div className={`pipeline-step ${state}`}>
+                <span>{state === "done" ? "✓" : `0${index + 1}`}</span>
+                <span>{label}</span>
               </div>
-              {index < steps.length - 1 && <span className={`pipeline-arrow ${done ? "done" : ""}`}>→</span>}
+
+              {index < steps.length - 1 && (
+                <span className={`pipeline-arrow ${step > index ? "done" : ""}`}>
+                  →
+                </span>
+              )}
             </div>
           );
         })}

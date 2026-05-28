@@ -154,28 +154,25 @@ export default function App() {
   }, [activeAttack, pushLog]);
 
   function renderPage() {
-    if (activePage === "Blue Agent") {
-      return (
-        <section className="dashboard-grid single-page">
-          <BlueAgentPanel
-            attack={activeAttack}
-            step={step}
-            onApprove={approveFix}
-            responseTime={responseTime}
-          />
-          <LiveLogs logs={logs} />
-        </section>
-      );
-    }
-
+   if (activePage === "Blue Agent") {
+  return (
+    <section className="dashboard-grid single-page blue-page">
+      <BlueAgentPanel
+        attack={activeAttack}
+        step={step}
+        onApprove={approveFix}
+        responseTime={responseTime}
+      />
+    </section>
+  );
+}
     if (activePage === "Red Agent") {
-      return (
-        <section className="dashboard-grid single-page">
-          <RedAgentPanel attack={activeAttack} step={step} />
-          <LiveLogs logs={logs} />
-        </section>
-      );
-    }
+  return (
+    <section className="dashboard-grid single-page red-page">
+      <RedAgentPanel attack={activeAttack} step={step} />
+    </section>
+  );
+}
 
     if (activePage === "Database") {
       return (
