@@ -1,0 +1,103 @@
+{
+  "status": "success",
+  "graph": "prod",
+  "schema_discovered": 20,
+  "cypher_executed": true,
+  "results_found": 13,
+  "attack_report": {
+    "entry_point": "State Bank of India",
+    "cve_used": "CVE-2024-67890",
+    "attack_steps": [
+      {
+        "step": 1,
+        "action": "Exploited a critical unpatched vulnerability in the State Bank of India's public-facing API gateway.",
+        "target_node": "State Bank of India",
+        "result": "Gained initial foothold and remote code execution on the API server."
+      },
+      {
+        "step": 2,
+        "action": "Performed internal network reconnaissance and leveraged compromised credentials to pivot to the Disaster Recovery system.",
+        "target_node": "DisasterRecovery",
+        "result": "Achieved administrative access to the Disaster Recovery orchestration platform, allowing for potential disruption or manipulation of recovery operations."
+      },
+      {
+        "step": 3,
+        "action": "Identified and accessed the UPIGateway through a misconfigured service account, enabling potential transaction manipulation.",
+        "target_node": "UPIGateway",
+        "result": "Gained control over the UPI payment processing gateway."
+      }
+    ],
+    "highest_value_target": "DisasterRecovery",
+    "blast_radius_count": 13,
+    "overall_severity": "CRITICAL",
+    "recommended_defenses": [
+      "Implement stringent network segmentation to isolate critical systems like Disaster Recovery and payment gateways from general network access.",
+      "Conduct regular and thorough vulnerability assessments and penetration tests, focusing on external-facing APIs and internal critical infrastructure.",
+      "Enforce multi-factor authentication (MFA) for all administrative access, especially for internal systems and privileged accounts.",
+      "Establish robust endpoint detection and response (EDR) solutions across all servers with proactive threat hunting capabilities.",
+      "Review and harden API security configurations, including input validation, rate limiting, and strict access controls."
+    ]
+  },
+  "raw_query_results": [
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "DisasterRecovery",
+      "target_risk": 55.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "InvestmentMgmt",
+      "target_risk": 53.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "LiquidityMgmt",
+      "target_risk": 53.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "ALMSystem",
+      "target_risk": 54.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "ForexSystem",
+      "target_risk": 54.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "MoneyMarket",
+      "target_risk": 54.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "CustomerAnalytics",
+      "target_risk": 54.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "BusinessIntelligence",
+      "target_risk": 53.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "CampaignMgmt",
+      "target_risk": 53.4
+    },
+    {
+      "entry_point": "State Bank of India",
+      "entry_risk": 61.4,
+      "target": "CustomerSupport",
+      "target_risk": 53.4
+    }
+  ]
+}

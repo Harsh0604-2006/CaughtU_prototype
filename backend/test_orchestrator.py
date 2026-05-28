@@ -5,6 +5,8 @@ import logging
 import json
 from orchestrator import Orchestrator
 from config import PRODUCTION_GRAPH
+from nvd_sync import run_nvd_sync
+from risk_calculator import run_risk_calculation
 
 # Setup logging
 logging.basicConfig(
@@ -19,6 +21,21 @@ def run_test():
     print("="*80 + "\n")
     
     try:
+        # 0. Refresh CVE enrichment and risk scoring before orchestrator states
+        print("[*] Running NVD sync...")
+        nvd_result = run_nvd_sync(graph_name=PRODUCTION_GRAPH)
+        print(
+            f"     NVD Sync: {nvd_result.get('status', 'unknown')} | "
+            f"nodes enriched={nvd_result.get('nodes_enriched', 0)}"
+        )
+
+        print("[*] Recalculating dynamic risk scores...")
+        risk_result = run_risk_calculation(graph_name=PRODUCTION_GRAPH)
+        print(
+            f"     Risk Calc: {risk_result.get('status', 'unknown')} | "
+            f"nodes updated={risk_result.get('risk_score_nodes_updated', 0)}"
+        )
+
         # 1. Initialize orchestrator
         # To get the state in LangGraph without a persistent checkpointer, it's easier to just pass the interrupted state
         # back in. Let's create a memory saver just for this test.
@@ -28,7 +45,7 @@ def run_test():
         orchestrator = Orchestrator()
         
         # We will use CoreDBServer01 since it's highly connected and vulnerable
-        target_server = "CoreBankingAPI"
+        target_server = "State Bank of India"
         
         # 2. Start the cycle until it interrupts for HUMAN_REVIEW
         print(f"\n[*] Starting Dual-Loop Cycle for {target_server} on {PRODUCTION_GRAPH}...")

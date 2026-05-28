@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 import json
 from neo4j_client import Neo4jClient
 from llm_client import LLMClient
+from risk_calculator import run_risk_calculation
 from config import SIMULATION_GRAPH, PRODUCTION_GRAPH, DEFAULT_GRAPH
 import logging
 
@@ -134,6 +135,13 @@ class BlueAgent:
                 "message": str(e),
                 "affected_nodes": []
             }
+
+    def generate_playbook(
+        self,
+        attack_vector: Dict[str, Any],
+        server_properties: Dict[str, Any],
+        risk_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Generate remediation playbook using LLM with dynamic risk scoring context.
         
@@ -159,15 +167,63 @@ class BlueAgent:
             "risk_context": risk_context or {}
         }
         
-        result = self.llm.generate_remediation_playbook(enriched_context['attack_vector'], enriched_context['server_properties'])
-        
-        # Annotate result with risk metadata
-        if isinstance(result, dict):
-            result['risk_score'] = risk_score
-            result['severity_level'] = enriched_context['severity_level']
-            result['blast_radius_context'] = risk_context.get('blast_radius_count', 0) if risk_context else 0
-        
-        return result
+        raw_result = self.llm.generate_remediation_playbook(enriched_context['attack_vector'], enriched_context['server_properties'])
+
+        # Normalize LLM output: prefer parsed dict, otherwise try to extract JSON from raw_response
+        playbook_result: Dict[str, Any] = {}
+
+        if isinstance(raw_result, dict) and raw_result.get('playbook'):
+            playbook_result = raw_result
+        else:
+            # Try to extract JSON blob from possible raw_response
+            text = ''
+            if isinstance(raw_result, dict):
+                # common keys: raw_response or parse_error
+                text = raw_result.get('raw_response') or raw_result.get('response') or ''
+            elif isinstance(raw_result, str):
+                text = raw_result
+
+            if text:
+                # Remove markdown fences if present
+                cleaned = text.strip()
+                if cleaned.startswith('```json'):
+                    cleaned = cleaned[7:]
+                elif cleaned.startswith('```'):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith('```'):
+                    cleaned = cleaned[:-3]
+
+                # Attempt to find the first JSON object
+                try:
+                    first = cleaned.find('{')
+                    last = cleaned.rfind('}')
+                    if first != -1 and last != -1 and last > first:
+                        json_str = cleaned[first:last+1]
+                        import json as _json
+                        playbook_result = _json.loads(json_str)
+                    else:
+                        playbook_result = {'raw_response': text}
+                except Exception:
+                    playbook_result = {'raw_response': text}
+            else:
+                playbook_result = {'raw_response': str(raw_result)}
+
+        # Enrich and ensure keys exist
+        try:
+            playbook_result.setdefault('playbook', playbook_result.get('playbook', []))
+            playbook_result['total_remediation_time'] = playbook_result.get('total_remediation_time', 'unknown')
+            playbook_result['risk_level_before'] = playbook_result.get('risk_level_before', 'Unknown')
+            playbook_result['risk_level_after'] = playbook_result.get('risk_level_after', 'Unknown')
+            playbook_result['validation_checklist'] = playbook_result.get('validation_checklist', [])
+
+            # Add risk metadata from server_properties / risk_context
+            playbook_result['risk_score'] = server_properties.get('risk_score', risk_score)
+            playbook_result['severity_level'] = self._determine_severity_level(playbook_result['risk_score'])
+            playbook_result['blast_radius_context'] = risk_context.get('blast_radius_count', 0) if risk_context else playbook_result.get('blast_radius_context', 0)
+        except Exception:
+            pass
+
+        return playbook_result
     
     def _determine_severity_level(self, risk_score: float) -> str:
         """
@@ -215,20 +271,22 @@ class BlueAgent:
         try:
             # Get risk context before isolation
             with self.neo4j.driver.session() as session:
-                pre_query = "MATCH (s:Server {name: $name}) RETURN s.risk_score as risk_score"
+                pre_query = "MATCH (s {name: $name}) RETURN s.risk_score as risk_score"
                 pre_result = session.run(pre_query, name=server_name)
                 pre_record = pre_result.single()
                 if pre_record:
                     result['risk_score_before'] = pre_record['risk_score']
             
-            # Apply isolation: delete all edges connected to the target server
-            query = f"""
-            MATCH (s:Server {{name: $server_name}})
+            # Apply isolation: delete all edges connected to the target node.
+            # This is label-agnostic because graph schema may not use :Server.
+            query = """
+            MATCH (s {name: $server_name})
             OPTIONAL MATCH (s)-[r]-()
             WITH s, collect(DISTINCT r) AS rels, count(DISTINCT r) AS deleted_count
             FOREACH (rel IN rels | DELETE rel)
             SET s.status = 'Isolated',
                 s.compromised = true,
+                s.isolated = true,
                 s.isolation_timestamp = datetime()
             RETURN s.name as name, deleted_count
             """
@@ -238,9 +296,15 @@ class BlueAgent:
                 record = iso_result.single()
                 if record:
                     result['edges_deleted'] = record.get('deleted_count', 0)
-                    
-                    # Get risk score after isolation
-                    post_query = "MATCH (s:Server {name: $name}) RETURN s.risk_score as risk_score"
+
+                    # Recalculate risk scores after isolation to reflect impact
+                    try:
+                        run_risk_calculation(graph_name=graph_name)
+                    except Exception:
+                        logger.warning("Post-fix risk recalculation failed or skipped")
+
+                    # Get risk score after isolation (after recalculation)
+                    post_query = "MATCH (s {name: $name}) RETURN s.risk_score as risk_score"
                     post_result = session.run(post_query, name=server_name)
                     post_record = post_result.single()
                     if post_record:
