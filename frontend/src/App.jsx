@@ -1,188 +1,283 @@
-import { useState, useEffect, useCallback } from "react";
-import Header           from "./components/Header";
-import GraphPanel       from "./components/GraphPanel";
-import AttackVectorList from "./components/AttackVectorList";
-import StateBar         from "./components/StateBar";
-import RedAgentPanel    from "./components/RedAgentPanel";
-import PlaybookPanel    from "./components/PlaybookPanel";
-import { getStats, getAnomalies, getAlerts } from "./api";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-// ── Attack scenarios (3 random attacks) ─────────────────────
-const ATTACKS = [
-  {
-    cve: "CVE-2021-44228", name: "Log4Shell",
-    entry: "SRV002", server: "CoreDBServer01",
-    ip: "45.33.12.156", location: "Russia",
-    hour: "03:22 AM", attempts: 8, risk: 90,
-    path: ["SRV002","SRV001","API003","BANK001","SRV007"],
-    playbook: [
-      { icon:"🔒", text:"Isolate CoreDBServer01 from internal zone" },
-      { icon:"🔑", text:"Force password reset — all active sessions" },
-      { icon:"🛡️", text:"Block ports 389 and 636 at Firewall01" },
-      { icon:"🔧", text:"Apply patch for CVE-2021-44228 (Log4j 2.17.1)" },
-      { icon:"✅", text:"Verify no active sessions from 45.33.12.156" },
-    ],
-  },
-  {
-    cve: "CVE-2022-22965", name: "Spring4Shell",
-    entry: "NET006", server: "AppServer01",
-    ip: "103.21.58.99", location: "China",
-    hour: "02:15 AM", attempts: 12, risk: 95,
-    path: ["NET006","SRV006","SRV002","SRV001","BANK001"],
-    playbook: [
-      { icon:"🔒", text:"Isolate AppServer01 immediately" },
-      { icon:"🚫", text:"Block IP range 103.21.0.0/16 at gateway" },
-      { icon:"🔧", text:"Apply Spring Framework patch 5.3.18+" },
-      { icon:"🔑", text:"Rotate all API keys and session tokens" },
-      { icon:"✅", text:"Scan all Java apps for vulnerable Spring versions" },
-    ],
-  },
-  {
-    cve: "CVE-2023-34362", name: "MOVEit SQL Injection",
-    entry: "SRV004", server: "BackupServer01",
-    ip: "185.220.101.5", location: "Germany",
-    hour: "04:00 AM", attempts: 5, risk: 80,
-    path: ["SRV004","SRV001","API001","BANK001"],
-    playbook: [
-      { icon:"🔒", text:"Take BackupServer01 offline immediately" },
-      { icon:"🗄️", text:"Audit all database access logs for SQL anomalies" },
-      { icon:"🔧", text:"Apply MOVEit Transfer security patch" },
-      { icon:"🛡️", text:"Enable WAF rules for SQL injection patterns" },
-      { icon:"✅", text:"Verify database integrity — check for exfiltration" },
-    ],
-  },
-];
+import Sidebar from "./components/Sidebar.jsx";
+import TopHeader from "./components/TopHeader.jsx";
+import AgentCard from "./components/AgentCard.jsx";
+import DatabaseGraph from "./components/DatabaseGraph.jsx";
+import AttackVectorList from "./components/AttackVectorList.jsx";
+import PipelineBar from "./components/PipelineBar.jsx";
+import RedAgentPanel from "./components/RedAgentPanel.jsx";
+import BlueAgentPanel from "./components/BlueAgentPanel.jsx";
+import LiveLogs from "./components/LiveLogs.jsx";
+
+import { attacks, initialLogs } from "./data/mockData.js";
+
+const STEP_DELAY = 700;
+
+function stamp() {
+  return new Date().toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function createLog(level, text) {
+  return {
+    id: Math.random().toString(36).slice(2),
+    time: stamp(),
+    level,
+    text,
+  };
+}
 
 export default function App() {
-  // ── global state ─────────────────────────────────────────
-  const [step,            setStep]            = useState(-1);
-  const [attack,          setAttack]          = useState(null);
-  const [nodeStates,      setNodeStates]      = useState({});
-  const [stats,           setStats]           = useState({ total_logins:0, anomalies:0, open_alerts:0, total_servers:0 });
-  const [statusText,      setStatusText]      = useState("MONITORING");
-  const [complianceDone,  setComplianceDone]  = useState(false);
-  const [responseTime,    setResponseTime]    = useState(null);
+  const [activePage, setActivePage] = useState("Dashboard");
+  const [now, setNow] = useState(new Date());
+  const [status, setStatus] = useState("MONITORING");
+  const [step, setStep] = useState(-1);
+  const [activeAttack, setActiveAttack] = useState(null);
+  const [nodeStates, setNodeStates] = useState({});
+  const [logs, setLogs] = useState(() =>
+    initialLogs.map((log) =>
+      createLog(
+        log.level || log.type || "info",
+        log.text || log.message || "System event detected"
+      )
+    )
+  );
+  const [blueRequested, setBlueRequested] = useState(false);
+  const [responseTime, setResponseTime] = useState(null);
 
-  // load live stats on mount
   useEffect(() => {
-    getStats().then(setStats).catch(() => {});
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  // ── simulate attack ──────────────────────────────────────
+  const pushLog = useCallback((level, text) => {
+    setLogs((prev) => [...prev.slice(-70), createLog(level, text)]);
+  }, []);
+
+  const metrics = useMemo(() => {
+    const compromised = Object.values(nodeStates).filter(
+      (value) => value === "compromised"
+    ).length;
+
+    const fixed = Object.values(nodeStates).filter(
+      (value) => value === "fixed"
+    ).length;
+
+    return {
+      openAlerts: status === "SECURED" ? 0 : activeAttack ? 3 : 0,
+      riskScore: activeAttack ? activeAttack.risk : 12,
+      nodesAtRisk: activeAttack ? activeAttack.path.length : 0,
+      compromised,
+      fixed,
+    };
+  }, [activeAttack, nodeStates, status]);
+
   const simulateAttack = useCallback(() => {
-    const a = ATTACKS[Math.floor(Math.random() * ATTACKS.length)];
-    setAttack(a);
+    const chosen = attacks[Math.floor(Math.random() * attacks.length)];
+
+    setActivePage("Dashboard");
+    setActiveAttack(chosen);
+    setStatus("UNDER ATTACK");
     setStep(0);
     setNodeStates({});
-    setStatusText("UNDER ATTACK");
-    setComplianceDone(false);
+    setBlueRequested(false);
     setResponseTime(null);
-    setStats(s => ({ ...s, anomalies: Math.floor(Math.random()*8)+3, open_alerts: Math.floor(Math.random()*5)+2 }));
 
-    // blast radius — light nodes red one by one
-    a.path.forEach((id, i) => {
+    const cveName = chosen.cve || chosen.via || "Unknown CVE";
+    const targetName = chosen.target || chosen.entry || "Unknown target";
+
+    setLogs((prev) => [
+      ...prev.slice(-40),
+      createLog(
+        "danger",
+        `Simulated breach started: ${cveName} targeting ${targetName}.`
+      ),
+      createLog(
+        "info",
+        "Blast radius scan started. Lighting affected database graph nodes."
+      ),
+    ]);
+
+    chosen.path.forEach((nodeId, index) => {
       setTimeout(() => {
-        setNodeStates(prev => ({ ...prev, [id]: "compromised" }));
-        if (i === a.path.length - 1) {
-          setTimeout(() => setStep(1), 600);
-        }
-      }, i * 400);
+        setNodeStates((prev) => ({ ...prev, [nodeId]: "compromised" }));
+        pushLog("danger", `Blast radius node marked: ${nodeId}`);
+      }, index * STEP_DELAY);
     });
-  }, []);
 
-  // auto-advance step 1 → 2
-  useEffect(() => {
-    if (step === 1) {
-      const t = setTimeout(() => setStep(2), 1800);
-      return () => clearTimeout(t);
-    }
-  }, [step]);
+    const redDelay = chosen.path.length * STEP_DELAY + 500;
 
-  // auto-advance step 2 → 3 after playbook loads
-  useEffect(() => {
-    if (step === 2) {
-      const t = setTimeout(() => setStep(3), attack?.playbook.length * 350 + 800 || 2500);
-      return () => clearTimeout(t);
-    }
-  }, [step, attack]);
+    setTimeout(() => {
+      setStep(1);
+      pushLog("danger", "Red Agent generated threat narrative and attack path.");
+    }, redDelay);
 
-  // ── approve and apply fix ────────────────────────────────
-  const approveAndApply = useCallback(() => {
-    if (!attack) return;
+    setTimeout(() => {
+      setStep(2);
+      pushLog("info", "Blue Agent building remediation playbook.");
+    }, redDelay + 1500);
+
+    setTimeout(() => {
+      setStep(3);
+      setBlueRequested(true);
+      pushLog("warn", "Blue Agent requests human approval before applying fix.");
+    }, redDelay + 3500);
+  }, [pushLog]);
+
+  const approveFix = useCallback(() => {
+    if (!activeAttack) return;
+
     setStep(4);
+    setBlueRequested(false);
+    pushLog("ok", "Approval received. Blue Agent applying remediation sequence.");
 
-    attack.path.forEach((id, i) => {
+    activeAttack.path.forEach((nodeId, index) => {
       setTimeout(() => {
-        setNodeStates(prev => ({ ...prev, [id]: "fixed" }));
-        if (i === attack.path.length - 1) {
-          setTimeout(() => {
-            setStep(5);
-            setStatusText("SECURED");
-            setStats(s => ({ ...s, open_alerts: 0 }));
-            setComplianceDone(true);
-            setResponseTime((Math.random()*2+3).toFixed(1));
-          }, 600);
-        }
-      }, i * 350);
+        setNodeStates((prev) => ({ ...prev, [nodeId]: "fixed" }));
+        pushLog("ok", `Remediated node: ${nodeId}`);
+      }, index * 520);
     });
-  }, [attack]);
 
-  return (
-    <div style={styles.root}>
-      <Header
-        stats={stats}
-        statusText={statusText}
-        onSimulate={simulateAttack}
-      />
-      <div style={styles.main}>
-        {/* Left: graph */}
-        <GraphPanel nodeStates={nodeStates} />
+    setTimeout(() => {
+      setStep(5);
+      setStatus("SECURED");
+      setResponseTime((Math.random() * 1.8 + 3.2).toFixed(1));
+      pushLog(
+        "ok",
+        "Verification complete. Environment secured and monitoring resumed."
+      );
+    }, activeAttack.path.length * 520 + 700);
+  }, [activeAttack, pushLog]);
 
-        {/* Right: CVEs + compliance */}
-        <AttackVectorList
-          complianceDone={complianceDone}
+  function renderPage() {
+    if (activePage === "Blue Agent") {
+      return (
+        <section className="dashboard-grid single-page">
+          <BlueAgentPanel
+            attack={activeAttack}
+            step={step}
+            onApprove={approveFix}
+            responseTime={responseTime}
+          />
+          <LiveLogs logs={logs} />
+        </section>
+      );
+    }
+
+    if (activePage === "Red Agent") {
+      return (
+        <section className="dashboard-grid single-page">
+          <RedAgentPanel attack={activeAttack} step={step} />
+          <LiveLogs logs={logs} />
+        </section>
+      );
+    }
+
+    if (activePage === "Database") {
+      return (
+        <section className="dashboard-grid single-page">
+          <DatabaseGraph nodeStates={nodeStates} activeAttack={activeAttack} />
+          <AttackVectorList activeAttack={activeAttack} />
+        </section>
+      );
+    }
+
+    if (activePage === "Logs") {
+      return (
+        <section className="dashboard-grid single-page">
+          <LiveLogs logs={logs} />
+        </section>
+      );
+    }
+
+    if (activePage === "Settings") {
+      return (
+        <section className="dashboard-grid single-page">
+          <div className="panel settings-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">SYSTEM SETTINGS</p>
+                <h2>Command Configuration</h2>
+              </div>
+              <span className="panel-chip green">Online</span>
+            </div>
+
+            <div className="empty-state">
+              Settings module placeholder. Add backend configuration here.
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="dashboard-grid">
+        <div className="agent-row">
+          <AgentCard
+            type="blue"
+            title="Blue Agent"
+            subtitle="Defense Automation"
+            status={
+              blueRequested
+                ? "Approval Required"
+                : status === "SECURED"
+                ? "Verified Clean"
+                : "Standing By"
+            }
+            metricLabel="Playbook Confidence"
+            metricValue={activeAttack ? "96%" : "Ready"}
+            description="Builds containment, patching and verification playbooks before requesting approval."
+          />
+
+          <AgentCard
+            type="red"
+            title="Red Agent"
+            subtitle="Threat Simulation"
+            status={activeAttack ? "Attack Path Found" : "Idle"}
+            metricLabel="Current Risk"
+            metricValue={activeAttack ? `${activeAttack.risk}/100` : "12/100"}
+            description="Maps entry point, CVE route, blast radius and possible lateral movement."
+          />
+        </div>
+
+        <DatabaseGraph nodeStates={nodeStates} activeAttack={activeAttack} />
+
+        <AttackVectorList activeAttack={activeAttack} />
+
+        <PipelineBar step={step} />
+
+        <RedAgentPanel attack={activeAttack} step={step} />
+
+        <BlueAgentPanel
+          attack={activeAttack}
+          step={step}
+          onApprove={approveFix}
           responseTime={responseTime}
         />
 
-        {/* Pipeline bar */}
-        <StateBar step={step} />
+        <LiveLogs logs={logs} />
+      </section>
+    );
+  }
 
-        {/* Bottom two panels */}
-        <div style={styles.bottomGrid}>
-          <RedAgentPanel attack={attack} step={step} />
-          <PlaybookPanel
-            attack={attack}
-            step={step}
-            onApprove={approveAndApply}
-          />
-        </div>
-      </div>
+  return (
+    <div className="app-shell">
+      <Sidebar active={activePage} onNavigate={setActivePage} />
+
+      <main className="command-center">
+        <TopHeader
+          now={now}
+          status={status}
+          metrics={metrics}
+          onSimulate={simulateAttack}
+        />
+
+        {renderPage()}
+      </main>
     </div>
   );
 }
-
-const styles = {
-  root: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    overflow: "hidden",
-    background: "var(--bg)",
-  },
-  main: {
-    flex: 1,
-    display: "grid",
-    gridTemplateColumns: "1fr 340px",
-    gridTemplateRows: "1fr auto 260px",
-    gap: "1px",
-    background: "var(--border)",
-    overflow: "hidden",
-  },
-  bottomGrid: {
-    gridColumn: "1 / -1",
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "1px",
-    background: "var(--border)",
-  },
-};

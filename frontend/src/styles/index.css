@@ -1,0 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+:root {
+  --bg: #0A0C12;
+  --surface: #12151F;
+  --surface-2: #1A1F2E;
+  --cyan: #00E5FF;
+  --red: #FF2D55;
+  --purple: #8B5CF6;
+  --green: #22FF99;
+  --text-primary: #E0E7FF;
+  --text-secondary: #94A3C1;
+  --muted: #64748B;
+  --border: rgba(148, 163, 193, 0.16);
+  --glass: rgba(18, 21, 31, 0.72);
+  --shadow-cyan: 0 0 30px rgba(0, 229, 255, 0.18);
+  --shadow-red: 0 0 30px rgba(255, 45, 85, 0.18);
+  --shadow-purple: 0 0 34px rgba(139, 92, 246, 0.2);
+  --shadow-green: 0 0 30px rgba(34, 255, 153, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(0, 229, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 85% 20%, rgba(255, 45, 85, 0.11), transparent 26%),
+    radial-gradient(circle at 60% 92%, rgba(139, 92, 246, 0.12), transparent 32%),
+    var(--bg);
+  font-family: "Inter", system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 193, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 193, 0.045) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, rgba(0, 0, 0, 0.1));
+  z-index: -1;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 12, 18, 0.4);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.32);
+  border-radius: 999px;
+}
