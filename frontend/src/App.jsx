@@ -52,7 +52,7 @@ export default function App() {
   ]);
   const [blueRequested, setBlueRequested] = useState(false);
   const [responseTime, setResponseTime] = useState(null);
-  
+
   // Real stats from backend
   const [apiStats, setApiStats] = useState({ total_servers: 0, open_alerts: 0 });
 
@@ -104,27 +104,27 @@ export default function App() {
     try {
       // 1. Call Red Agent
       const response = await analyzeAttackVectors("prod");
-      
+
       const report = response.attack_report;
-      
+
       if (!report || Object.keys(report).length === 0 || report.error || report.parse_error) {
         pushLog("warn", "No viable attack vectors found or parse error.");
         setStatus("MONITORING");
         return;
       }
-      
+
       const cveName = report.cve_used || "Unknown CVE";
       const targetName = report.entry_point || "Unknown Target";
-      
+
       // Build attack path from raw_query_results for richer blast radius visualization
       const rawResults = response.raw_query_results || [];
       const blastRadiusNodes = rawResults
         .map(r => r.target)
         .filter(Boolean)
         .filter((v, i, a) => a.indexOf(v) === i); // unique targets
-      
+
       const attackPath = [targetName, ...blastRadiusNodes.slice(0, 6)];
-      
+
       // Structure activeAttack to be compatible with UI components
       const structuredAttack = {
         title: `${cveName} on ${targetName}`,
@@ -145,7 +145,7 @@ export default function App() {
 
       setActiveAttack(structuredAttack);
       setStatus("UNDER ATTACK");
-      
+
       pushLog("danger", `Threat detected: ${cveName} targeting ${targetName}`);
 
       // Visualize blast radius
@@ -166,19 +166,19 @@ export default function App() {
       setTimeout(async () => {
         setStep(2);
         pushLog("info", "Blue Agent building remediation playbook using LLM...");
-        
+
         // 2. Call Blue Agent playbook generation
         try {
           const playbookRes = await generatePlaybook(
-            report, 
+            report,
             { name: targetName, criticality: "high" }
           );
-          
+
           setActiveAttack(prev => ({
             ...prev,
             playbook: playbookRes.playbook
           }));
-          
+
           setStep(3);
           setBlueRequested(true);
           pushLog("warn", "Blue Agent playbook ready. Human approval required.");
@@ -198,18 +198,14 @@ export default function App() {
 
     setStep(4);
     setBlueRequested(false);
-    pushLog("ok", "Approval received. Blue Agent isolating compromised nodes.");
+    pushLog("ok", "Approval received. Blue Agent isolating the compromised node.");
 
     try {
       // 3. Call Blue Agent isolation API
       await isolateServer("prod", activeAttack.entry);
-      
-      activeAttack.path.forEach((nodeId, index) => {
-        setTimeout(() => {
-          setNodeStates((prev) => ({ ...prev, [nodeId]: "fixed" }));
-          pushLog("ok", `Remediated and isolated node: ${nodeId}`);
-        }, index * 520);
-      });
+
+      setNodeStates((prev) => ({ ...prev, [activeAttack.entry]: "fixed" }));
+      pushLog("ok", `Remediated and isolated compromised node: ${activeAttack.entry}`);
 
       setTimeout(() => {
         setStep(5);
@@ -236,7 +232,7 @@ export default function App() {
         </section>
       );
     }
-    
+
     if (activePage === "Red Agent") {
       return (
         <section className="dashboard-grid single-page red-page">
@@ -293,8 +289,8 @@ export default function App() {
               blueRequested
                 ? "Approval Required"
                 : status === "SECURED"
-                ? "Verified Clean"
-                : "Standing By"
+                  ? "Verified Clean"
+                  : "Standing By"
             }
             metricLabel="Playbook Confidence"
             metricValue={activeAttack ? "96%" : "Ready"}
