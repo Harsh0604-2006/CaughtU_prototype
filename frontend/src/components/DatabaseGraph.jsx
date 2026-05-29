@@ -1,205 +1,217 @@
 import { useEffect, useRef, useState } from "react";
 import NeoVis from "neovis.js";
 
+function colorFromLabel(label = "") {
+  const palette = [
+    "#3b82f6", "#8b5cf6", "#06b6d4", "#10b981",
+    "#f59e0b", "#ef4444", "#14b8a6", "#64748b",
+  ];
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) {
+    hash = (hash * 31 + label.charCodeAt(i)) >>> 0;
+  }
+  return palette[hash % palette.length];
+}
+
+function normalizeUri(rawUri) {
+  if (rawUri.startsWith("neo4j+ssc://")) {
+    return {
+      serverUrl: rawUri.replace("neo4j+ssc://", "neo4j://"),
+      driverConfig: { encrypted: "ENCRYPTION_ON", trust: "TRUST_ALL_CERTIFICATES" },
+    };
+  }
+  if (rawUri.startsWith("neo4j+s://")) {
+    return {
+      serverUrl: rawUri.replace("neo4j+s://", "neo4j://"),
+      driverConfig: { encrypted: "ENCRYPTION_ON", trust: "TRUST_SYSTEM_CA_SIGNED_CERTIFICATES" },
+    };
+  }
+  if (rawUri.startsWith("bolt+ssc://")) {
+    return {
+      serverUrl: rawUri.replace("bolt+ssc://", "bolt://"),
+      driverConfig: { encrypted: "ENCRYPTION_ON", trust: "TRUST_ALL_CERTIFICATES" },
+    };
+  }
+  if (rawUri.startsWith("bolt+s://")) {
+    return {
+      serverUrl: rawUri.replace("bolt+s://", "bolt://"),
+      driverConfig: { encrypted: "ENCRYPTION_ON", trust: "TRUST_SYSTEM_CA_SIGNED_CERTIFICATES" },
+    };
+  }
+  return { serverUrl: rawUri, driverConfig: undefined };
+}
+
 export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
-  const containerRef = useRef(null);
-  const vizRef = useRef(null);
-  const [error, setError] = useState(null);
+  const containerRef   = useRef(null);
+  const vizRef         = useRef(null);
+  const renderTimerRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  const getNodeColor = (node) => {
+    const props  = node?.raw?.properties || {};
+    const labels = node?.raw?.labels     || [];
+    const name   = props.name;
+    if (name && nodeStates[name]) {
+      const s = nodeStates[name];
+      if (s === "compromised") return "#ff2d55";
+      if (s === "fixed")       return "#22ff99";
+      if (s === "attention")   return "#f59e0b";
+    }
+    return colorFromLabel(labels[0] || name || "");
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     let cancelled = false;
 
-    async function initGraph() {
-      try {
-        if (cancelled) return;
+    const rawUri   = import.meta.env.VITE_NEO4J_URI      || "";
+    const user     = import.meta.env.VITE_NEO4J_USER     || "neo4j";
+    const password = import.meta.env.VITE_NEO4J_PASSWORD || "";
 
-        // Clean up previous instance
-        if (vizRef.current) {
-          try { vizRef.current.clearNetwork(); } catch (_) {}
-        }
-
-        const neo4jUri = import.meta.env.VITE_NEO4J_URI || "";
-        const neo4jUser = import.meta.env.VITE_NEO4J_USER || "";
-        const neo4jPassword = import.meta.env.VITE_NEO4J_PASSWORD || "";
-
-        // Use the original neo4j+s:// URL as-is
-        // The +s suffix tells the driver to use encryption — no separate driverConfig needed
-        const serverUrl = neo4jUri;
-
-        // Build node color function based on nodeStates
-        const getNodeColor = (node) => {
-          const name = node.properties?.name;
-          if (name && nodeStates[name]) {
-            const state = nodeStates[name];
-            if (state === "compromised") return "#ff2d55";
-            if (state === "fixed") return "#22ff99";
-            if (state === "attention") return "#f59e0b";
-          }
-
-          // Color by label type
-          const labels = node.labels || [];
-          if (labels.some(l => /bank|core|api|gateway/i.test(l))) return "#3b82f6";
-          if (labels.some(l => /server|datacenter|infrastructure/i.test(l))) return "#8b5cf6";
-          if (labels.some(l => /compliance|security|fraud|audit/i.test(l))) return "#f59e0b";
-          if (labels.some(l => /customer|employee/i.test(l))) return "#06b6d4";
-          if (labels.some(l => /account|loan|transaction/i.test(l))) return "#22ff99";
-          return "#6b7280";
-        };
-
-        const config = {
-          containerId: containerRef.current.id,
-          neo4j: {
-            serverUrl,
-            serverUser: neo4jUser,
-            serverPassword: neo4jPassword,
-            serverDatabase: "neo4j",
-          },
-          visConfig: {
-            nodes: {
-              shape: "dot",
-              size: 18,
-              font: {
-                color: "#ffffff",
-                size: 11,
-                face: "JetBrains Mono, monospace",
-              },
-              borderWidth: 2,
-            },
-            edges: {
-              arrows: { to: { enabled: true, scaleFactor: 0.5 } },
-              color: { color: "#4b5563", highlight: "#ef4444" },
-              smooth: { type: "continuous" },
-            },
-            physics: {
-              enabled: true,
-              solver: "forceAtlas2Based",
-              forceAtlas2Based: {
-                gravitationalConstant: -40,
-                centralGravity: 0.008,
-                springLength: 120,
-                springConstant: 0.04,
-                damping: 0.4,
-              },
-              stabilization: { iterations: 80, fit: true },
-            },
-            interaction: {
-              hover: true,
-              tooltipDelay: 200,
-              zoomView: true,
-              dragView: true,
-            },
-          },
-          labels: {
-            // Use a wildcard-like approach: configure common labels
-            // NeoVis will pick up any label that matches
-          },
-          relationships: {},
-          // Query ALL nodes and their relationships - schema agnostic
-          initialCypher: `
-            MATCH (n)
-            WHERE n.name IS NOT NULL
-            OPTIONAL MATCH (n)-[r]-(m)
-            WHERE m.name IS NOT NULL
-            RETURN n, r, m
-            LIMIT 200
-          `,
-        };
-
-        // Dynamically add label configs for all known banking graph labels
-        const knownLabels = [
-          "DataCenter", "ComplianceModule", "Customer", "Employee",
-          "Account", "Loan", "Server", "CoreBankingAPI", "APIGateway",
-          "PaymentGateway", "UPIGateway", "TreasuryServer", "DatabaseServer",
-          "MessageBroker", "SecurityModule", "NetworkDevice", "Application",
-          "BankingNode", "Infrastructure", "Service"
-        ];
-
-        knownLabels.forEach(label => {
-          config.labels[label] = {
-            label: "name",
-            [NeoVis.NEOVIS_ADVANCED_CONFIG]: {
-              function: {
-                color: getNodeColor,
-              },
-            },
-          };
-        });
-
-        let VizClass = NeoVis;
-        if (typeof NeoVis !== 'function' && NeoVis.default) {
-          VizClass = NeoVis.default;
-        }
-        
-        const viz = new VizClass(config);
-
-        viz.registerOnEvent("completed", () => {
-          if (!cancelled) {
-            setLoading(false);
-            setError(null);
-          }
-        });
-
-        viz.registerOnEvent("error", (e) => {
-          console.error("NeoVis error:", e);
-          if (!cancelled) {
-            setLoading(false);
-            setError("Failed to connect to Neo4j database");
-          }
-        });
-
-        vizRef.current = viz;
-        viz.render();
-      } catch (err) {
-        console.error("Error initializing NeoVis:", err);
-        if (!cancelled) {
-          setLoading(false);
-          setError(err.message || "Failed to load graph visualization");
-        }
-      }
+    if (!rawUri || !user || !password) {
+      setLoading(false);
+      setError("Missing VITE_NEO4J_URI / _USER / _PASSWORD in .env");
+      return;
     }
 
-    setLoading(true);
-    setError(null);
-    initGraph();
+    if (vizRef.current) {
+      try { vizRef.current.clearNetwork(); } catch (_) {}
+    }
+
+    const { serverUrl, driverConfig } = normalizeUri(rawUri);
+
+    const neo4jConfig = {
+      serverUrl,
+      serverUser: user,
+      serverPassword: password,
+      serverDatabase: "neo4j",
+      ...(driverConfig ? { driverConfig } : {}),
+    };
+
+    const config = {
+      containerId: containerRef.current.id,
+      neo4j: neo4jConfig,
+      labels: {
+        [NeoVis.NEOVIS_DEFAULT_CONFIG]: {
+          label: "name",
+          size: "risk_score",
+          [NeoVis.NEOVIS_ADVANCED_CONFIG]: {
+            function: { color: getNodeColor },
+          },
+        },
+      },
+      relationships: {
+  [NeoVis.NEOVIS_DEFAULT_CONFIG]: {
+    caption: true,
+    thickness: 5,
+  },
+},
+   
+      visConfig: {
+        nodes: {
+          shape: "dot",
+          size: 24,
+          font: {
+            color: "#ffffff",
+            size: 12,
+            face: "JetBrains Mono, monospace",
+            strokeWidth: 2,        // FIX 2: was missing entirely — needs a small value
+            strokeColor: "#0a0c12",
+          },
+          borderWidth: 2,
+        },
+        edges: {
+          arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+          width: 2,
+          font: {
+  color: "#ffffff",
+  size: 14,
+            face: "JetBrains Mono, monospace",
+            strokeWidth: 2,        // FIX 2: was 4 — thick stroke smears the text into a blur
+            strokeColor: "#0a0c12",
+            align: "top",
+          },
+          color: { color: "#94a3b8", highlight: "#f8fafc", hover: "#f43f5e" },
+          smooth: { type: "continuous" },
+        },
+        physics: {
+          enabled: true,
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: {
+            gravitationalConstant: -40,
+            centralGravity: 0.008,
+            springLength: 220,
+            springConstant: 0.04,
+            damping: 0.4,
+          },
+          stabilization: { iterations: 80, fit: true },
+        },
+        interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true },
+      },
+      initialCypher: `
+MATCH (n)
+OPTIONAL MATCH (n)-[r]-(m)
+RETURN n,r,m
+LIMIT 250
+`,
+    };
+
+    let VizClass = NeoVis;
+    if (typeof NeoVis !== "function" && NeoVis.default) VizClass = NeoVis.default;
+
+    const viz = new VizClass(config);
+
+    viz.registerOnEvent("completed", () => {
+      clearTimeout(renderTimerRef.current);
+      if (!cancelled) { setLoading(false); setError(null); }
+    });
+
+    viz.registerOnEvent("error", (e) => {
+      clearTimeout(renderTimerRef.current);
+      console.error("NeoVis error:", e);
+      if (!cancelled) {
+        setLoading(false);
+        setError(typeof e === "string" ? e : e?.message || "Connection failed");
+      }
+    });
+
+    vizRef.current = viz;
+    viz.render();
+
+    renderTimerRef.current = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 1500);
 
     return () => {
       cancelled = true;
+      clearTimeout(renderTimerRef.current);
+      try { viz.clearNetwork(); } catch (_) {}
     };
-  }, []); // Only init once!
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Dynamically update node colors without recreating the graph
   useEffect(() => {
     if (!vizRef.current) return;
-    
-    const viz = vizRef.current;
-    // Find the DataSet. NeoVis usually stores it on the instance or inside network
-    const nodesDataset = viz.nodes || (viz._network && viz._network.body && viz._network.body.data.nodes);
-    
-    if (!nodesDataset) return;
+    const dataset =
+      vizRef.current.nodes ||
+      vizRef.current._network?.body?.data?.nodes;
+    if (!dataset) return;
 
     try {
-      const allNodes = nodesDataset.get();
-      const updates = allNodes.map(node => {
-        // NeoVis stores original neo4j node in node.raw
-        const name = node.raw?.properties?.name || node.label;
-        if (name && nodeStates[name]) {
-           const state = nodeStates[name];
-           let color = "#f59e0b"; // attention
-           if (state === "compromised") color = "#ff2d55";
-           if (state === "fixed") color = "#22ff99";
-           return { id: node.id, color };
-        }
-        return null;
-      }).filter(Boolean);
-      
-      if (updates.length > 0) {
-        nodesDataset.update(updates);
-      }
+      const updates = dataset.get().map((node) => {
+        const props  = node.raw?.properties || {};
+        const labels = node.raw?.labels     || [];
+        const name   = props.name || node.label;
+        const state  = name && nodeStates[name];
+        const color  = state === "compromised" ? "#ff2d55"
+                     : state === "fixed"       ? "#22ff99"
+                     : state === "attention"   ? "#f59e0b"
+                     : colorFromLabel(labels[0] || name || "");
+        return { id: node.id, color: { background: color, border: color } };
+      });
+      if (updates.length) dataset.update(updates);
     } catch (e) {
-      console.warn("Failed to update node colors dynamically", e);
+      console.warn("Node color update failed:", e);
     }
   }, [nodeStates]);
 
@@ -213,23 +225,24 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
         <span className="live-pill">LIVE (NEOVIS)</span>
       </div>
 
-      <div className="graph-area">
+      <div className="graph-area" style={{ position: "relative" }}>
         {loading && (
           <div style={{
             position: "absolute", inset: 0, display: "flex",
             alignItems: "center", justifyContent: "center",
-            color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace",
-            fontSize: "12px", zIndex: 5,
+            color: "var(--text-secondary)", fontSize: "12px",
+            fontFamily: "JetBrains Mono, monospace", zIndex: 5,
           }}>
-            Connecting to Neo4j...
+            Connecting to Neo4j…
           </div>
         )}
         {error && (
           <div style={{
             position: "absolute", inset: 0, display: "flex",
             alignItems: "center", justifyContent: "center",
-            color: "var(--red)", fontFamily: "JetBrains Mono, monospace",
-            fontSize: "12px", zIndex: 5, flexDirection: "column", gap: "8px",
+            color: "var(--red)", fontSize: "12px",
+            fontFamily: "JetBrains Mono, monospace",
+            zIndex: 5, flexDirection: "column", gap: "8px",
           }}>
             <span>⚠ {error}</span>
             <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>
