@@ -9,11 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@egjs/hammerjs": "^2.0.17",
     "@vitejs/plugin-react": "latest",
+    "component-emitter": "^2.0.0",
+    "keycharm": "^0.4.0",
     "markdown-to-jsx": "^9.8.1",
+    "neo4j-driver": "^4.4.11",
     "neovis.js": "^2.1.0",
     "react": "latest",
     "react-dom": "latest",
+    "uuid": "^14.0.0",
+    "vis-data": "^7.1.10",
+    "vis-network": "^9.1.13",
+    "vis-util": "^6.0.0",
     "vite": "latest"
   }
 }
