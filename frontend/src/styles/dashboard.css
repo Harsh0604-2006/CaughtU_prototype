@@ -1499,10 +1499,12 @@
 }
 
 /* Make playbook list scrollable */
+.playbook-content.scroll-list,
 .playbook-list.scroll-list,
 .blue-agent-panel .playbook-list,
 .blue-playbook-panel .playbook-list {
-  max-height: 300px;
+  max-height: none;
+  flex: 1;
   overflow-y: auto;
   padding-right: 8px;
 }

@@ -47,8 +47,14 @@ export default function TopHeader({ now, status, metrics, onSimulate }) {
           <strong>{formattedTime}</strong>
         </div>
 
-        <button type="button" className="simulate-btn" onClick={onSimulate}>
-          Simulate Attack
+        <button 
+          type="button" 
+          className="simulate-btn" 
+          onClick={onSimulate}
+          disabled={status === "ANALYZING"}
+          style={{ opacity: status === "ANALYZING" ? 0.7 : 1, cursor: status === "ANALYZING" ? "not-allowed" : "pointer" }}
+        >
+          {status === "ANALYZING" ? "Simulating Attack..." : "Simulate Attack"}
         </button>
       </div>
     </header>

@@ -1,6 +1,17 @@
-import { attackVectors } from "../data/mockData.js";
+import { useEffect, useState } from "react";
+import { getVulnerabilities } from "../api.js";
 
 export default function AttackVectorList({ activeAttack }) {
+  const [vectors, setVectors] = useState([]);
+
+  useEffect(() => {
+    getVulnerabilities("prod").then(data => {
+      if (data && data.vulnerabilities) {
+        setVectors(data.vulnerabilities.slice(0, 5)); // show top 5
+      }
+    }).catch(err => console.error("Failed to fetch vulnerabilities", err));
+  }, []);
+
   return (
     <section className="panel vector-panel">
       <div className="panel-header">
@@ -12,21 +23,27 @@ export default function AttackVectorList({ activeAttack }) {
       </div>
 
       <div className="vector-list">
-        {attackVectors.map((item) => {
-          const active = activeAttack?.cve === item.cve;
+        {vectors.map((item, index) => {
+          const cveId = item.cve_id || "Unknown CVE";
+          const active = activeAttack?.via === cveId;
           return (
-            <article className={`vector-item ${active ? "active" : ""}`} key={item.cve}>
+            <article className={`vector-item ${active ? "active" : ""}`} key={item.id || `${cveId}-${index}`}>
               <div>
-                <strong>{item.cve}</strong>
-                <span>{item.service}</span>
+                <strong>{cveId}</strong>
+                <span>{item.name || item.product_mapped || "Service"}</span>
               </div>
               <div className="score-block">
-                <small>{item.priority}</small>
-                <b>{item.score}</b>
+                <small>CVSS</small>
+                <b>{item.cvss_score || "N/A"}</b>
               </div>
             </article>
           );
         })}
+        {vectors.length === 0 && (
+          <div style={{ padding: "10px", color: "#6b7280", textAlign: "center" }}>
+            No vulnerabilities found or loading...
+          </div>
+        )}
       </div>
     </section>
   );

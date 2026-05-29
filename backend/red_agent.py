@@ -78,8 +78,25 @@ class RedAgent:
             cypher_results = self.neo4j.execute_custom_cypher(cypher_query)
             
             if not cypher_results:
-                logger.warning("Cypher query returned no results")
-                cypher_results = []
+                logger.warning("Cypher query returned no results, trying generic relationship traversal")
+                fallback_query = """
+MATCH (entry)
+WHERE entry.risk_score IS NOT NULL
+ORDER BY entry.risk_score DESC
+LIMIT 1
+MATCH (entry)-[*1..3]-(neighbor)
+WHERE neighbor.risk_score IS NOT NULL
+RETURN DISTINCT 
+    entry.name as entry_point,
+    entry.risk_score as entry_risk,
+    neighbor.name as target,
+    neighbor.risk_score as target_risk
+LIMIT 100
+                """
+                cypher_results = self.neo4j.execute_custom_cypher(fallback_query)
+                if not cypher_results:
+                    logger.warning("Fallback query also returned no results")
+                    cypher_results = []
             
             logger.info(f"Query returned {len(cypher_results)} results")
             
