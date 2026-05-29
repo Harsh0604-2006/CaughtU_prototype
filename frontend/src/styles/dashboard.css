@@ -90,11 +90,9 @@
   padding: 14px;
   border: 1px solid rgba(0, 229, 255, 0.22);
   border-radius: 24px;
-  background: linear-gradient(
-    135deg,
-    rgba(0, 229, 255, 0.08),
-    rgba(139, 92, 246, 0.08)
-  );
+  background: linear-gradient(135deg,
+      rgba(0, 229, 255, 0.08),
+      rgba(139, 92, 246, 0.08));
   box-shadow: var(--shadow-cyan);
 }
 
@@ -318,11 +316,9 @@
   padding: 12px 17px;
   border-radius: 16px;
   color: var(--text-primary);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 45, 85, 0.9),
-    rgba(139, 92, 246, 0.72)
-  );
+  background: linear-gradient(135deg,
+      rgba(255, 45, 85, 0.9),
+      rgba(139, 92, 246, 0.72));
   border: 1px solid rgba(255, 45, 85, 0.45);
   box-shadow: var(--shadow-red);
   cursor: pointer;
@@ -374,11 +370,9 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 24px;
-  background: linear-gradient(
-    145deg,
-    rgba(18, 21, 31, 0.84),
-    rgba(26, 31, 46, 0.64)
-  );
+  background: linear-gradient(145deg,
+      rgba(18, 21, 31, 0.84),
+      rgba(26, 31, 46, 0.64));
   backdrop-filter: blur(22px);
   box-shadow: 0 16px 60px rgba(0, 0, 0, 0.22);
 }
@@ -912,11 +906,9 @@
   border: 1px solid rgba(255, 45, 85, 0.18);
   border-radius: 14px;
   padding: 11px 12px;
-  background: linear-gradient(
-    145deg,
-    rgba(255, 45, 85, 0.08),
-    rgba(10, 12, 18, 0.28)
-  );
+  background: linear-gradient(145deg,
+      rgba(255, 45, 85, 0.08),
+      rgba(10, 12, 18, 0.28));
 }
 
 .report-item span {
@@ -1093,6 +1085,14 @@
   box-shadow: var(--shadow-cyan);
 }
 
+.blue-agent-panel .blue-agent-content-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
+}
+
 .cyan-text {
   color: var(--cyan);
 }
@@ -1204,6 +1204,7 @@
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 0.45;
@@ -1217,6 +1218,7 @@
 }
 
 @keyframes pulseRed {
+
   0%,
   100% {
     transform: scale(1);
@@ -1228,6 +1230,7 @@
 }
 
 @keyframes redDotPulse {
+
   0%,
   100% {
     transform: scale(1);
@@ -1247,6 +1250,7 @@
 }
 
 @keyframes warningPulse {
+
   0%,
   100% {
     box-shadow: 0 0 16px rgba(255, 45, 85, 0.16);
@@ -1441,6 +1445,7 @@
     height: 220px;
   }
 }
+
 .single-page {
   grid-template-columns: 1fr;
   grid-template-rows: auto auto;
@@ -1457,6 +1462,7 @@
   grid-column: 1 / -1;
   grid-row: auto;
 }
+
 /* =====================================================
    SCROLL + APPROVE BUTTON FIX
    Add at END of dashboard.css
@@ -1486,6 +1492,7 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
+  gap: 14px;
 }
 
 /* Keep approve button visible */
@@ -1504,7 +1511,7 @@
 .blue-agent-panel .playbook-list,
 .blue-playbook-panel .playbook-list {
   max-height: none;
-  flex: 1;
+  flex: 0 0 auto;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -1561,6 +1568,7 @@
   flex-shrink: 0;
   margin-bottom: 14px;
 }
+
 /* =====================================================
    LOGS PANEL FIT FIX + TITLE SIZE TWEAK
 ===================================================== */
@@ -1601,6 +1609,7 @@
 .logs-panel .panel-header {
   flex-shrink: 0;
 }
+
 /* =====================================================
    LIVE LOGS FULL HEIGHT FIX
 ===================================================== */
@@ -1638,6 +1647,7 @@
   height: 100% !important;
   min-height: 0;
 }
+
 /* =====================================================
    BLUE AGENT PAGE ONLY
 ===================================================== */
@@ -1654,6 +1664,7 @@
   max-height: none !important;
   overflow-y: auto !important;
 }
+
 /* =====================================================
    FINAL HEADER + BLUE AGENT PAGE FIX
    Paste at the VERY END of dashboard.css
@@ -1736,6 +1747,7 @@
   display: flex;
   flex-direction: column;
 }
+
 /* =====================================================
    RED AGENT PAGE ONLY
 ===================================================== */
@@ -1795,6 +1807,7 @@
     grid-template-columns: 1fr;
   }
 }
+
 /* =====================================================
    PIPELINE FULL OVAL VISIBILITY + VERIFIED GREEN FIX
 ===================================================== */
@@ -1858,6 +1871,7 @@
 .pipeline-arrow.done {
   color: var(--green) !important;
 }
+
 /* =====================================================
    TOP HEADER FULL BLOCK FIX
    Makes CAUGHTU header look like a complete rectangle card
@@ -1897,7 +1911,7 @@
 }
 
 /* Left text area */
-.top-header > div:first-child {
+.top-header>div:first-child {
   min-width: 0;
 }
 
