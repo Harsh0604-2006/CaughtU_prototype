@@ -114,8 +114,9 @@ export default function App() {
         return;
       }
 
-      const cveName = report.cve_used || "Unknown CVE";
       const targetName = report.entry_point || "Unknown Target";
+
+      const cveName = report.cve_used || "Unknown CVE";
 
       // Build attack path from raw_query_results for richer blast radius visualization
       const rawResults = response.raw_query_results || [];
@@ -282,41 +283,13 @@ export default function App() {
 
     return (
       <section className="dashboard-grid">
-        <div className="agent-row">
-          <AgentCard
-            type="blue"
-            title="Blue Agent"
-            subtitle="Defense Automation"
-            status={
-              blueRequested
-                ? "Approval Required"
-                : status === "SECURED"
-                  ? "Verified Clean"
-                  : "Standing By"
-            }
-            metricLabel="Playbook Confidence"
-            metricValue={activeAttack ? "96%" : "Ready"}
-            description="Builds containment, patching and verification playbooks before requesting approval."
-          />
-
-          <AgentCard
-            type="red"
-            title="Red Agent"
-            subtitle="Threat Simulation"
-            status={status === "ANALYZING" ? "Analyzing API..." : activeAttack ? "Attack Path Found" : "Idle"}
-            metricLabel="Current Risk"
-            metricValue={activeAttack ? `${activeAttack.risk}/100` : "12/100"}
-            description="Maps entry point, CVE route, blast radius and possible lateral movement."
-          />
-        </div>
-
         <DatabaseGraph key={graphRefreshKey} nodeStates={nodeStates} activeAttack={activeAttack} />
+
+        <RedAgentPanel attack={activeAttack} step={step} />
 
         <AttackVectorList activeAttack={activeAttack} />
 
         <PipelineBar step={step} />
-
-        <RedAgentPanel attack={activeAttack} step={step} />
 
         <BlueAgentPanel
           attack={activeAttack}

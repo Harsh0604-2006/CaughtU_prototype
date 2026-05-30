@@ -293,6 +293,89 @@ async def get_vulnerabilities(graph: str = PRODUCTION_GRAPH):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/red-agent/ranked-cves/{graph}")
+async def get_ranked_cves(graph: str = PRODUCTION_GRAPH):
+    """
+    Get ranked attack vectors / CVEs for the specified graph.
+
+    Uses the LLM prioritization pipeline to rank the most exploitable vectors
+    from live Neo4j server and vulnerability data.
+    """
+    try:
+        if not red_agent:
+            raise HTTPException(status_code=503, detail="Red Agent not initialized")
+
+        if graph not in [PRODUCTION_GRAPH, SIMULATION_GRAPH]:
+            raise HTTPException(status_code=400, detail=f"Invalid graph: {graph}")
+
+        servers = red_agent.neo4j.get_servers(graph_name=graph)
+        vulnerabilities = red_agent.neo4j.get_vulnerabilities_for_servers(servers)
+
+        ranked = red_agent.llm.prioritize_attack_vectors(servers, vulnerabilities, [])
+
+        raw_vectors = ranked.get("attack_vectors") or []
+
+        def normalize_vector(vector: dict, rank_index: int) -> dict:
+            return {
+                "rank": vector.get("rank", rank_index + 1),
+                "target_server": vector.get("target_server") or vector.get("server_name") or vector.get("name") or "Unknown",
+                "target_ip": vector.get("target_ip") or vector.get("ip") or "",
+                "entry_cve": vector.get("entry_cve") or vector.get("cve_id") or vector.get("entry_cve_id") or "Unknown CVE",
+                "cvss_score": vector.get("cvss_score") or vector.get("risk_score") or 0,
+                "strategy": vector.get("strategy") or vector.get("exploitation_strategy") or "",
+                "blast_radius": vector.get("blast_radius") or [],
+                "exploitability_score": vector.get("exploitability_score") or 0,
+                "business_impact": vector.get("business_impact") or "",
+            }
+
+        attack_vectors = []
+        seen_keys = set()
+        for index, vector in enumerate(raw_vectors):
+            normalized = normalize_vector(vector, index)
+            dedupe_key = (normalized["entry_cve"], normalized["target_server"])
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            attack_vectors.append(normalized)
+
+        if not attack_vectors and vulnerabilities:
+            # Fallback ranking if the LLM response is incomplete.
+            for index, vuln in enumerate(
+                sorted(
+                    vulnerabilities,
+                    key=lambda item: float(item.get("cvss_score") or 0),
+                    reverse=True,
+                )[:5]
+            ):
+                attack_vectors.append({
+                    "rank": index + 1,
+                    "target_server": vuln.get("name") or vuln.get("server_name") or "Unknown",
+                    "target_ip": vuln.get("ip") or "",
+                    "entry_cve": vuln.get("cve_id") or "Unknown CVE",
+                    "cvss_score": vuln.get("cvss_score") or 0,
+                    "strategy": vuln.get("attack_vector") or "",
+                    "blast_radius": [],
+                    "exploitability_score": 0,
+                    "business_impact": "",
+                })
+
+        return {
+            "status": "success",
+            "graph": graph,
+            "attack_vectors": attack_vectors,
+            "executive_summary": ranked.get("executive_summary", ""),
+            "defensive_priorities": ranked.get("defensive_priorities", []),
+            "source": "llm_ranking",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch ranked CVEs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/red-agent/blast-radius/{graph}/{server_name}")
 async def get_blast_radius(graph: str, server_name: str):
     """

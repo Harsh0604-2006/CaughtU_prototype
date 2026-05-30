@@ -12,12 +12,12 @@ async function fetchAPI(endpoint, options = {}) {
       },
       ...options,
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.detail || `API Error: ${response.status} ${response.statusText}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error(`Error fetching ${endpoint}:`, error);
@@ -51,6 +51,13 @@ export async function getServers(graph = "prod") {
  */
 export async function getVulnerabilities(graph = "prod") {
   return fetchAPI(`/api/red-agent/vulnerabilities/${graph}`);
+}
+
+/**
+ * Get ranked attack vectors / CVEs from the backend LLM ranking pipeline
+ */
+export async function getRankedCves(graph = "prod") {
+  return fetchAPI(`/api/red-agent/ranked-cves/${graph}`);
 }
 
 /**
