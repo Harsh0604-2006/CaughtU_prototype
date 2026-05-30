@@ -1451,6 +1451,12 @@
   grid-template-rows: auto auto;
 }
 
+.single-page.database-page {
+  grid-template-rows: minmax(520px, 58vh) minmax(280px, 1fr);
+  gap: 22px;
+  align-content: start;
+}
+
 .single-page .blue-agent-panel,
 .single-page .red-agent-panel,
 .single-page .database-panel,
@@ -1461,6 +1467,35 @@
 .single-page .settings-panel {
   grid-column: 1 / -1;
   grid-row: auto;
+}
+
+.single-page.database-page .database-panel {
+  grid-row: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.single-page.database-page .attack-vector-panel,
+.single-page.database-page .vector-panel {
+  grid-row: 2;
+  min-height: 0;
+  height: 100%;
+}
+
+.single-page.database-page .graph-area {
+  height: clamp(460px, 52vh, 620px);
+  min-height: 460px;
+}
+
+.single-page.database-page .attack-list,
+.single-page.database-page .vector-list {
+  max-height: none;
+}
+
+.single-page.database-page .attack-vector-panel,
+.single-page.database-page .vector-panel {
+  max-height: none;
+  overflow-y: auto !important;
 }
 
 /* =====================================================

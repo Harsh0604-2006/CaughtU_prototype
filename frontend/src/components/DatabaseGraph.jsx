@@ -4,22 +4,10 @@ import { Network, DataSet } from "vis-network/standalone";
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
+const BASE_NODE_COLOR = "#3B82F6";
+
 function colorFromLabel(label = "") {
-  const palette = [
-    "#00E5FF", // Neon Cyan
-    "#8B5CF6", // Purple Glow
-    "#22FF99", // Neon Green
-    "#F59E0B", // Cyber Amber
-    "#EC4899", // Cyber Pink
-    "#3B82F6", // Neon Blue
-    "#10B981", // Emerald
-    "#FF2D55", // Neon Red
-  ];
-  let hash = 0;
-  for (let i = 0; i < label.length; i++) {
-    hash = (hash * 31 + label.charCodeAt(i)) >>> 0;
-  }
-  return palette[hash % palette.length];
+  return BASE_NODE_COLOR;
 }
 
 /** Safely convert a Neo4j Integer (or plain number) to a JS number */
@@ -72,7 +60,7 @@ function createNodeTooltip(n, label, state, baseColor) {
   stateSpan.style.borderRadius = "4px";
   stateSpan.style.fontWeight = "bold";
   stateSpan.style.fontFamily = "'JetBrains Mono', monospace";
-  
+
   if (displayState === "compromised") {
     stateSpan.style.background = "rgba(255, 45, 85, 0.15)";
     stateSpan.style.color = "#FF2D55";
@@ -222,20 +210,20 @@ function createEdgeTooltip(r) {
 /* ─── Component ────────────────────────────────────────────── */
 
 export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
-  const containerRef  = useRef(null);
-  const networkRef    = useRef(null);
-  const nodesDS       = useRef(null);
+  const containerRef = useRef(null);
+  const networkRef = useRef(null);
+  const nodesDS = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
-  const [stats,   setStats]   = useState({ nodes: 0, edges: 0 });
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({ nodes: 0, edges: 0 });
 
   /* ── Initial render ── */
   useEffect(() => {
     if (!containerRef.current) return;
     let cancelled = false;
 
-    const rawUri   = import.meta.env.VITE_NEO4J_URI      || "";
-    const user     = import.meta.env.VITE_NEO4J_USER     || "neo4j";
+    const rawUri = import.meta.env.VITE_NEO4J_URI || "";
+    const user = import.meta.env.VITE_NEO4J_USER || "neo4j";
     const password = import.meta.env.VITE_NEO4J_PASSWORD || "";
 
     if (!rawUri || !user || !password) {
@@ -244,11 +232,15 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
       return;
     }
 
-    const driver  = neo4j.driver(rawUri, neo4j.auth.basic(user, password));
+    const driver = neo4j.driver(rawUri, neo4j.auth.basic(user, password));
     const session = driver.session(); // AuraDB: do NOT specify database name
 
     async function fetchAndRender() {
       try {
+        const nodeResult = await session.run(
+          "MATCH (n) RETURN n LIMIT 300"
+        );
+
         const result = await session.run(
           "MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 300"
         );
@@ -257,6 +249,11 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
 
         const nodesMap = new Map(); // id → vis node obj
         const edgesMap = new Map(); // id → vis edge obj
+
+        for (const record of nodeResult.records) {
+          const n = record.get("n");
+          processNode(n, nodesMap, nodeStates);
+        }
 
         for (const record of result.records) {
           const n = record.get("n");
@@ -272,9 +269,9 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
           const eId = toNum(r.identity);
           if (!edgesMap.has(eId)) {
             edgesMap.set(eId, {
-              id:    eId,
-              from:  toNum(r.start),
-              to:    toNum(r.end),
+              id: eId,
+              from: toNum(r.start),
+              to: toNum(r.end),
               label: r.type,
               title: createEdgeTooltip(r),
               arrows: { to: { enabled: true, scaleFactor: 0.95 } },
@@ -283,14 +280,14 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
                 highlight: "#00E5FF", // Vibrant cyan on selection
                 hover: "#22FF99" // Vibrant green on hover
               },
-              width: 1.5,
-              selectionWidth: 3,
-              hoverWidth: 3,
+              width: 3.5,
+              selectionWidth: 6,
+              hoverWidth: 6,
               font: {
                 color: "rgba(224, 231, 255, 0.75)",
-                size: 9,
+                size: 12,
                 face: "JetBrains Mono, monospace",
-                strokeWidth: 2,
+                strokeWidth: 3,
                 strokeColor: "#0A0C12",
                 align: "horizontal", // curve-aligned font
               },
@@ -363,8 +360,8 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
           setError(e?.message || "Connection failed");
         }
       } finally {
-        await session.close().catch(() => {});
-        await driver.close().catch(() => {});
+        await session.close().catch(() => { });
+        await driver.close().catch(() => { });
       }
     }
 
@@ -374,8 +371,8 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
       cancelled = true;
       networkRef.current?.destroy();
       networkRef.current = null;
-      session.close().catch(() => {});
-      driver.close().catch(() => {});
+      session.close().catch(() => { });
+      driver.close().catch(() => { });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -387,11 +384,11 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
         const state = nodeStates[node.label];
         const color =
           state === "compromised" ? "#ff2d55" :
-          state === "fixed"       ? "#22ff99" :
-          state === "attention"   ? "#f59e0b" :
-          node._baseColor;
+            state === "fixed" ? "#22ff99" :
+              BASE_NODE_COLOR;
         return {
           id: node.id,
+          size: 140,
           color: {
             background: color + "22",
             border: color,
@@ -404,6 +401,14 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
             size: 15,
             x: 0,
             y: 0
+          },
+          font: {
+            color: "#ffffff",
+            size: 46,
+            face: "JetBrains Mono, monospace",
+            strokeWidth: 6,
+            strokeColor: "#0A0C12",
+            vadjust: 12
           },
           title: createNodeTooltip(node._nObj, node._label, state, color)
         };
@@ -492,28 +497,27 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
 
 /* ─── Node builder (extracted to keep render fn clean) ──── */
 function processNode(n, nodesMap, nodeStates) {
-  const nId    = toNum(n.identity);
+  const nId = toNum(n.identity);
   if (nodesMap.has(nId)) return;
 
-  const label  = n.labels[0] || "";
-  const name   = n.properties.name || label;
-  const state  = nodeStates[name];
-  const base   = colorFromLabel(label);
-  const color  =
+  const label = n.labels[0] || "";
+  const name = n.properties.name || label;
+  const state = nodeStates[name];
+  const base = colorFromLabel(label);
+  const color =
     state === "compromised" ? "#ff2d55" :
-    state === "fixed"       ? "#22ff99" :
-    state === "attention"   ? "#f59e0b" :
-    base;
+      state === "fixed" ? "#22ff99" :
+        base;
 
   nodesMap.set(nId, {
-    id:    nId,
+    id: nId,
     label: name,
     title: createNodeTooltip(n, label, state, color),
     _baseColor: base,
     _nObj: n,
     _label: label,
     shape: "dot",
-    size:  48, // Extra large prominent node size
+    size: 140, // Larger prominent node size for easier readability
     color: {
       background: color + "22", // cyber glassmorphic center
       border: color,
@@ -529,11 +533,11 @@ function processNode(n, nodesMap, nodeStates) {
     },
     font: {
       color: "#ffffff",
-      size: 11,
+      size: 46,
       face: "JetBrains Mono, monospace",
-      strokeWidth: 3,
+      strokeWidth: 6,
       strokeColor: "#0A0C12",
-      vadjust: 6 // push text slightly down from the node
+      vadjust: 12 // push text slightly down from the node
     },
     borderWidth: 2.5,
     borderWidthSelected: 4

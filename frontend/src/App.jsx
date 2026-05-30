@@ -44,6 +44,7 @@ export default function App() {
   const [step, setStep] = useState(-1);
   const [activeAttack, setActiveAttack] = useState(null);
   const [nodeStates, setNodeStates] = useState({});
+  const [graphRefreshKey, setGraphRefreshKey] = useState(0);
   const [logs, setLogs] = useState([
     createLog("SYSTEM", "Cyber Defense Command initialized"),
     createLog("DATABASE", "Neo4j graph connection ready"),
@@ -205,6 +206,7 @@ export default function App() {
       await isolateServer("prod", activeAttack.entry);
 
       setNodeStates((prev) => ({ ...prev, [activeAttack.entry]: "fixed" }));
+      setGraphRefreshKey((prev) => prev + 1);
       pushLog("ok", `Remediated and isolated compromised node: ${activeAttack.entry}`);
 
       setTimeout(() => {
@@ -243,8 +245,8 @@ export default function App() {
 
     if (activePage === "Database") {
       return (
-        <section className="dashboard-grid single-page">
-          <DatabaseGraph nodeStates={nodeStates} activeAttack={activeAttack} />
+        <section className="dashboard-grid single-page database-page">
+          <DatabaseGraph key={graphRefreshKey} nodeStates={nodeStates} activeAttack={activeAttack} />
           <AttackVectorList activeAttack={activeAttack} />
         </section>
       );
@@ -308,7 +310,7 @@ export default function App() {
           />
         </div>
 
-        <DatabaseGraph nodeStates={nodeStates} activeAttack={activeAttack} />
+        <DatabaseGraph key={graphRefreshKey} nodeStates={nodeStates} activeAttack={activeAttack} />
 
         <AttackVectorList activeAttack={activeAttack} />
 
