@@ -274,20 +274,20 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
               to: toNum(r.end),
               label: r.type,
               title: createEdgeTooltip(r),
-              arrows: { to: { enabled: true, scaleFactor: 0.95 } },
+              arrows: { to: { enabled: true, type: "arrow", scaleFactor: 5.0 } },
               color: {
                 color: "rgba(186, 230, 253, 0.65)", // Highly visible bright light-blue edge & arrows
                 highlight: "#00E5FF", // Vibrant cyan on selection
                 hover: "#22FF99" // Vibrant green on hover
               },
-              width: 3.5,
-              selectionWidth: 6,
-              hoverWidth: 6,
+              width: 8,
+              selectionWidth: 12,
+              hoverWidth: 12,
               font: {
                 color: "rgba(224, 231, 255, 0.75)",
-                size: 12,
+                size: 14,
                 face: "JetBrains Mono, monospace",
-                strokeWidth: 3,
+                strokeWidth: 4,
                 strokeColor: "#0A0C12",
                 align: "horizontal", // curve-aligned font
               },
