@@ -285,9 +285,9 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
               hoverWidth: 12,
               font: {
                 color: "rgba(224, 231, 255, 0.75)",
-                size: 14,
+                size: 46,
                 face: "JetBrains Mono, monospace",
-                strokeWidth: 4,
+                strokeWidth: 6,
                 strokeColor: "#0A0C12",
                 align: "horizontal", // curve-aligned font
               },
