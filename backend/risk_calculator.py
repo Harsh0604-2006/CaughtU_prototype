@@ -1,7 +1,7 @@
 """
-Risk Calculator Module - DYNAMIC VERSION
+Risk Calculator Module - DYNAMIC 
 Queries database structure first, then calculates risk scores
-Adapts to whatever graph schema exists - NO HARDCODED ASSUMPTIONS
+Adapts to whatever graph schema exists 
 """
 import logging
 from typing import Dict, Any
