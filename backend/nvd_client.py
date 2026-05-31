@@ -1,7 +1,7 @@
 """
 NVD Client Module
 Handles fetching CVE data from NVD API or pre-cached JSON
-For demo, uses pre-cached JSON to avoid rate limits and Wi-Fi issues
+For demo, we are using pre-cached JSON to avoid rate limits and Wi-Fi issues
 """
 import json
 import os
