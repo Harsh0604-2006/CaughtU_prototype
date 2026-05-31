@@ -261,26 +261,6 @@ export default function App() {
       );
     }
 
-    if (activePage === "Settings") {
-      return (
-        <section className="dashboard-grid single-page">
-          <div className="panel settings-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">SYSTEM SETTINGS</p>
-                <h2>Backend Configuration</h2>
-              </div>
-              <span className="panel-chip green">Online</span>
-            </div>
-
-            <div className="empty-state">
-              API Base URL: http://localhost:8000
-            </div>
-          </div>
-        </section>
-      );
-    }
-
     return (
       <section className="dashboard-grid">
         <DatabaseGraph key={graphRefreshKey} nodeStates={nodeStates} activeAttack={activeAttack} />

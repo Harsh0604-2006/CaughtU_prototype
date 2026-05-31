@@ -4,21 +4,11 @@ const navItems = [
   { name: "Red Agent", icon: "▲" },
   { name: "Database", icon: "⬢" },
   { name: "Logs", icon: "▣" },
-  { name: "Settings", icon: "⚙" },
 ];
 
 export default function Sidebar({ active, onNavigate }) {
   return (
     <aside className="sidebar">
-      <div className="brand-block">
-        <div className="brand-mark">CD</div>
-
-        <div>
-          <p className="brand-title">Cyber</p>
-          <p className="brand-subtitle">Defense OS</p>
-        </div>
-      </div>
-
       <nav className="nav-list">
         {navItems.map((item) => (
           <button
@@ -32,11 +22,6 @@ export default function Sidebar({ active, onNavigate }) {
           </button>
         ))}
       </nav>
-
-      <div className="sidebar-footer">
-        <span className="signal-dot"></span>
-        <span>Secure Link Active</span>
-      </div>
     </aside>
   );
 }
