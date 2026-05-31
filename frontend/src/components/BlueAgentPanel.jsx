@@ -143,7 +143,6 @@ export default function BlueAgentPanel({ attack, step, onApprove, responseTime }
             {/* Playbook steps grouped by phase */}
             <div className="playbook-content scroll-list" style={{
               textAlign: "left", padding: "10px", color: "var(--text-color)",
-              overflowY: "visible",
             }}>
               {Object.keys(phases).length > 0 ? (
                 phaseOrder

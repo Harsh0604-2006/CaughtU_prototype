@@ -445,8 +445,7 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
       `}</style>
       <div className="panel-header">
         <div>
-          <p className="eyebrow">NEO4J DATABASE GRAPH</p>
-          <h2>Infrastructure Attack Map</h2>
+          <h2>NEO4J DATABASE GRAPH</h2>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           {!loading && !error && (
@@ -488,7 +487,7 @@ export default function DatabaseGraph({ nodeStates = {}, activeAttack }) {
         )}
         <div
           ref={containerRef}
-          style={{ width: "100%", height: "650px", minHeight: "650px" }}
+          style={{ width: "100%", height: "100%", minHeight: "420px" }}
         />
       </div>
     </section>

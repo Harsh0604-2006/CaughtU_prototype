@@ -32,7 +32,7 @@
 /* ---------- Main Layout ---------- */
 
 .app-shell {
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -41,6 +41,13 @@
     radial-gradient(circle at 88% 18%, rgba(255, 45, 85, 0.1), transparent 28%),
     radial-gradient(circle at 55% 95%, rgba(139, 92, 246, 0.14), transparent 32%),
     var(--bg);
+  overflow: hidden;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
   overflow: hidden;
 }
 
@@ -61,7 +68,7 @@
   position: relative;
   z-index: 1;
   min-width: 0;
-  height: 100vh;
+  min-height: 100vh;
   padding: 22px;
   overflow: hidden;
 }
@@ -204,12 +211,12 @@
 ===================================================== */
 
 .top-header {
-  min-height: 92px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 18px 20px;
+  padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 24px;
   background: var(--glass);
@@ -248,13 +255,13 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 
 .mini-stat,
 .clock-card,
 .status-pill {
-  padding: 10px 13px;
+  padding: 7px 10px;
   border-radius: 16px;
   background: rgba(26, 31, 46, 0.72);
   border: 1px solid var(--border);
@@ -317,10 +324,10 @@
   border-radius: 16px;
   color: var(--text-primary);
   background: linear-gradient(135deg,
-      rgba(255, 45, 85, 0.9),
-      rgba(139, 92, 246, 0.72));
-  border: 1px solid rgba(255, 45, 85, 0.45);
-  box-shadow: var(--shadow-red);
+      rgba(0, 229, 255, 0.92),
+      rgba(59, 130, 246, 0.8));
+  border: 1px solid rgba(0, 229, 255, 0.42);
+  box-shadow: var(--shadow-cyan);
   cursor: pointer;
   font-weight: 800;
   transition:
@@ -334,7 +341,7 @@
 .approve-btn:hover {
   transform: translateY(-2px);
   filter: brightness(1.08);
-  box-shadow: 0 0 44px rgba(255, 45, 85, 0.28);
+  box-shadow: 0 0 44px rgba(0, 229, 255, 0.3);
 }
 
 /* =====================================================
@@ -343,11 +350,12 @@
 
 .dashboard-grid {
   margin-top: 20px;
-  height: calc(100vh - 134px);
+  min-height: calc(100vh - 134px);
   overflow-y: auto;
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
-  grid-template-rows: auto 420px auto minmax(260px, auto) minmax(220px, auto);
+  grid-template-rows: auto minmax(520px, 1fr) auto minmax(420px, auto) minmax(640px, auto);
+  align-content: start;
   gap: 18px;
   padding-right: 4px;
 }
@@ -527,15 +535,17 @@
 .graph-panel {
   grid-column: 1 / 2;
   grid-row: 2 / 3;
-  min-height: 420px;
+  min-height: 520px;
   border-color: rgba(139, 92, 246, 0.35);
   box-shadow: var(--shadow-purple);
+  display: flex;
+  flex-direction: column;
 }
 
 .graph-area {
   position: relative;
   width: 100%;
-  height: 330px;
+  height: 100%;
   margin-top: 18px;
   border-radius: 20px;
   overflow: hidden;
@@ -546,6 +556,13 @@
     rgba(10, 12, 18, 0.45);
   background-size: auto, 28px 28px, 28px 28px, auto;
   border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.database-panel .graph-area {
+  /* Let the graph area fill available panel space while respecting header */
+  flex: 1 1 auto;
+  min-height: 0;
+  /* allow flex children to shrink properly */
 }
 
 .graph-lines {
@@ -694,10 +711,13 @@
 .attack-vector-panel,
 .threat-panel {
   grid-column: 2 / 3;
-  grid-row: 2 / 3;
+  grid-row: 4 / 5;
   min-height: 420px;
   border-color: rgba(255, 45, 85, 0.28);
   box-shadow: var(--shadow-red);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
 }
 
 .vector-list,
@@ -706,6 +726,10 @@
   margin-top: 16px;
   display: grid;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .vector-item,
@@ -730,9 +754,14 @@
 .attack-item.active,
 .threat-item:hover,
 .threat-item.active {
-  transform: translateX(-3px);
   border-color: rgba(255, 45, 85, 0.45);
   box-shadow: var(--shadow-red);
+}
+
+.vector-item:hover,
+.attack-item:hover,
+.threat-item:hover {
+  transform: none;
 }
 
 .vector-item strong,
@@ -866,9 +895,12 @@
 .red-report-panel {
   grid-column: 1 / 2;
   grid-row: 4 / 5;
-  min-height: 260px;
+  min-height: 340px;
   border-color: rgba(255, 45, 85, 0.35);
   box-shadow: var(--shadow-red);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
 }
 
 .red-agent-panel::after,
@@ -893,6 +925,10 @@
   position: relative;
   z-index: 2;
   margin-top: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .report-grid {
@@ -971,6 +1007,8 @@
   color: var(--red);
   font-weight: 700;
   text-shadow: 0 0 12px rgba(255, 45, 85, 0.8);
+  font-size: 18px;
+  line-height: 1;
 }
 
 .report-list {
@@ -1078,11 +1116,14 @@
 
 .blue-agent-panel,
 .blue-playbook-panel {
-  grid-column: 2 / 3;
-  grid-row: 4 / 5;
-  min-height: 260px;
+  grid-column: 1 / -1;
+  grid-row: 5 / 6;
+  min-height: 1100px;
   border-color: rgba(0, 229, 255, 0.35);
   box-shadow: var(--shadow-cyan);
+  display: flex;
+  flex-direction: column;
+  overflow: visible !important;
 }
 
 .blue-agent-panel .blue-agent-content-stack {
@@ -1091,6 +1132,41 @@
   gap: 16px;
   min-height: 0;
   flex: 1;
+}
+
+.blue-agent-panel .blue-panel-body {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.blue-agent-panel .playbook-content.scroll-list,
+.blue-agent-panel .playbook-list.scroll-list,
+.blue-agent-panel .playbook-list {
+  flex: 1 1 820px;
+  min-height: 0;
+  overflow-y: auto !important;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.blue-agent-panel .validation-checklist-panel {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.blue-agent-panel .playbook-content.scroll-list,
+.blue-agent-panel .playbook-list.scroll-list,
+.blue-agent-panel .playbook-list {
+  flex: 1 1 820px;
+  min-height: 0;
+  overflow-y: auto !important;
+  padding-right: 8px;
+}
+
+.blue-agent-panel .validation-checklist-panel {
+  flex-shrink: 0;
+  max-height: none;
+  overflow: visible;
 }
 
 .cyan-text {
@@ -1146,11 +1222,13 @@
 ===================================================== */
 
 .logs-panel {
-  grid-column: 1 / -1;
-  grid-row: 5 / 6;
-  min-height: 220px;
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  min-height: 420px;
   border-color: rgba(34, 255, 153, 0.25);
   box-shadow: var(--shadow-green);
+  display: flex;
+  flex-direction: column;
 }
 
 .terminal-window {
@@ -1167,20 +1245,22 @@
 .log-line {
   margin: 0 0 9px;
   display: grid;
-  grid-template-columns: 105px 70px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 78px 48px minmax(0, 1fr);
+  gap: 6px;
   color: var(--text-secondary);
   font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
 .log-line span {
   color: var(--muted);
+  font-size: 10px;
 }
 
 .log-line b {
   color: var(--cyan);
+  font-size: 11px;
 }
 
 .log-line.danger b {
@@ -1495,7 +1575,7 @@
 .single-page.database-page .attack-vector-panel,
 .single-page.database-page .vector-panel {
   max-height: none;
-  overflow-y: auto !important;
+  overflow: hidden !important;
 }
 
 /* =====================================================
@@ -1504,8 +1584,12 @@
 ===================================================== */
 
 /* Make dashboard panels scroll instead of cutting content */
+/* Keep Blue panels visible so they can expand and the page can scroll to show their bottom */
 .blue-agent-panel,
-.blue-playbook-panel,
+.blue-playbook-panel {
+  overflow: visible !important;
+}
+
 .red-agent-panel,
 .red-report-panel,
 .vector-panel,
@@ -1546,7 +1630,7 @@
 .blue-agent-panel .playbook-list,
 .blue-playbook-panel .playbook-list {
   max-height: none;
-  flex: 0 0 auto;
+  flex: 1 1 820px;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -1554,8 +1638,8 @@
 /* Make Red Agent content scrollable */
 .red-agent-panel,
 .red-report-panel {
-  max-height: 360px;
-  overflow-y: auto !important;
+  max-height: 420px;
+  overflow: hidden !important;
 }
 
 /* Make Attack Vectors scrollable */
@@ -1563,16 +1647,14 @@
 .attack-vector-panel,
 .threat-panel {
   max-height: 420px;
-  overflow-y: auto !important;
+  overflow: hidden !important;
 }
 
 /* Make vector list itself scroll nicely */
 .vector-list,
 .attack-list,
 .threat-list {
-  max-height: 330px;
-  overflow-y: auto;
-  padding-right: 8px;
+  max-height: none;
 }
 
 /* In single page view, allow bigger panels */
@@ -1583,8 +1665,8 @@
 .single-page .vector-panel,
 .single-page .attack-vector-panel,
 .single-page .threat-panel {
-  max-height: calc(100vh - 260px);
-  overflow-y: auto !important;
+  max-height: calc(100vh - 140px);
+  overflow: hidden !important;
 }
 
 /* Make the whole dashboard page scroll if needed */
@@ -1610,7 +1692,7 @@
 
 /* Slightly smaller top title so it fits nicely */
 .top-header h1 {
-  font-size: clamp(22px, 2.8vw, 34px);
+  font-size: clamp(18px, 2vw, 26px);
   line-height: 1;
 }
 
@@ -1707,10 +1789,10 @@
 
 /* Makes the top rectangle fully visible and prevents clipping */
 .command-center {
-  height: 100vh;
+  min-height: 100vh;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 18px 22px;
+  padding: 18px 22px 0;
 }
 
 .top-header {
@@ -1722,9 +1804,9 @@
 
 /* Keep dashboard content below header */
 .dashboard-grid {
-  height: calc(100vh - 130px);
+  min-height: calc(100vh - 98px);
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /* =====================================================
@@ -1734,7 +1816,7 @@
 .blue-page {
   grid-template-columns: 1fr;
   grid-template-rows: auto;
-  height: calc(100vh - 130px);
+  min-height: calc(100vh - 90px);
   overflow-y: auto;
 }
 
@@ -1742,9 +1824,9 @@
 .blue-page .blue-agent-panel {
   grid-column: 1 / -1;
   grid-row: auto;
-  min-height: calc(100vh - 160px);
+  min-height: calc(100vh - 90px);
   max-height: none !important;
-  overflow-y: auto !important;
+  overflow: visible !important;
   display: flex;
   flex-direction: column;
 }
@@ -1752,7 +1834,7 @@
 /* Remove inner unnecessary scroll inside Remediation Plan */
 .blue-page .blue-agent-panel .playbook-list {
   max-height: none !important;
-  overflow: visible !important;
+  overflow-y: auto !important;
   padding-right: 0;
 }
 
@@ -1781,6 +1863,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* =====================================================
@@ -1913,23 +1996,23 @@
 ===================================================== */
 
 .command-center {
-  height: 100vh;
+  min-height: 100vh;
   padding: 22px 26px;
-  overflow: hidden;
+  overflow: auto;
   box-sizing: border-box;
 }
 
 /* Main header card */
 .top-header {
   width: 100%;
-  min-height: 125px;
-  padding: 26px 32px;
+  min-height: 72px;
+  padding: 12px 18px;
   border-radius: 28px;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 28px;
+  gap: 18px;
 
   background:
     radial-gradient(circle at 88% 30%, rgba(255, 45, 85, 0.14), transparent 34%),
@@ -1951,15 +2034,15 @@
 }
 
 .top-header .eyebrow {
-  margin-bottom: 12px;
-  font-size: 12px;
-  letter-spacing: 0.22em;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
   color: var(--text-secondary);
 }
 
 .top-header h1 {
   margin: 0;
-  font-size: clamp(34px, 3.5vw, 54px);
+  font-size: clamp(22px, 2.6vw, 36px);
   line-height: 1;
   color: var(--text-primary);
   text-shadow: 0 0 22px rgba(0, 229, 255, 0.22);
@@ -1970,22 +2053,22 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .mini-stat,
 .clock-card,
 .status-pill {
-  min-height: 64px;
-  padding: 12px 18px;
+  min-height: 0;
+  padding: 8px 12px;
   border-radius: 18px;
 }
 
 /* Content below header should start properly */
 .dashboard-grid {
   margin-top: 22px;
-  height: calc(100vh - 175px);
+  height: calc(100vh - 125px);
   overflow-y: auto;
 }
 
